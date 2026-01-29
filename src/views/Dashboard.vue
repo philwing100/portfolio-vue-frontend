@@ -16,8 +16,7 @@
 
     <div class="page-container" :style="{ 'background-color': 'var(--primaryColor)' }">
       <div class="lists-container">
-        <ListElement listName="Backburner" v-model="backburner" />
-        <DailyCalendar v-model:list1="backburner" v-model:list2="dailyList" :date="currentDate" />
+        <DailyCalendar v-model:list2="dailyList" :date="currentDate" />
         <ListElement listName="Daily List" v-model="dailyList" :initialDate="currentDate" />
       </div>
     </div>
@@ -48,7 +47,6 @@ export default {
     return {
       colors: colors,
       dailyList: [],
-      backburner: [],
       currentDate: getTodayDate(),
       isChecked: false,
     };
@@ -57,9 +55,6 @@ export default {
     ...mapState(['isAuthenticated', 'user']),
   },
   watch: {
-    backburner(newVal) {
-      //console.log('Backburner list updated:', newVal);
-    },
     dailyList(newVal) {
       //console.log('Daily list updated:', newVal);
     }
