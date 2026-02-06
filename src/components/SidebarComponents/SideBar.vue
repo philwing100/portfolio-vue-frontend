@@ -46,13 +46,21 @@ export default {
     const toggleBar = ref(false);
     const sidebarWidth = ref(11.25);
     const toggleButtonWidth = ref(11.25);
+    const isMobile = ref(false);
     const activeItem = ref(null);
     const routerLinks = ref([]);
 
+    const getOpenWidth = () => (isMobile.value ? 16 : 11.25);
+
+    const updateSidebarDimensions = () => {
+      const openWidth = getOpenWidth();
+      sidebarWidth.value = toggleBar.value ? 0 : openWidth;
+      toggleButtonWidth.value = toggleBar.value ? 3.125 : openWidth;
+    };
+
     const toggleWidth = () => {
       toggleBar.value = !toggleBar.value;
-      sidebarWidth.value = toggleBar.value ? 0 : 11.25;
-      toggleButtonWidth.value = toggleBar.value ? 3.125 : 11.25;
+      updateSidebarDimensions();
       localStorage.setItem('isSideBarExtended', JSON.stringify(toggleBar.value));
     };
 
@@ -79,6 +87,12 @@ export default {
       });*/
     };
 
+    const updateIsMobile = () => {
+      if (typeof window === 'undefined') return;
+      isMobile.value = window.innerWidth <= 768;
+      updateSidebarDimensions();
+    };
+
     onMounted(() => {
       // Now CSS variables are available
       sidebarColors.sideBar = getColorVar('--primaryColor');
@@ -87,11 +101,16 @@ export default {
 
       document.addEventListener('keyup', handleEscapeKey);
 
+      updateIsMobile();
+
       const storedSideBarBool = localStorage.getItem('isSideBarExtended');
       if (storedSideBarBool !== null) {
         toggleBar.value = JSON.parse(storedSideBarBool);
-        sidebarWidth.value = toggleBar.value ? 0 : 11.25;
-        toggleButtonWidth.value = toggleBar.value ? 3.125 : 11.25;
+        updateSidebarDimensions();
+      }
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', updateIsMobile);
       }
 
       nextTick(() => {
@@ -110,6 +129,9 @@ export default {
 
     onUnmounted(() => {
       document.removeEventListener('keyup', handleEscapeKey);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', updateIsMobile);
+      }
       routerLinks.value.forEach((link) => {
         link.removeEventListener('mouseenter', () => handleHover(link));
         link.removeEventListener('mouseleave', () => handleMouseLeave(link));
@@ -125,7 +147,8 @@ export default {
       activeItem,
       setActiveItem,
       sidebarColors,
-      routerLinks
+      routerLinks,
+      isMobile
     };
   },
   beforeRouteUpdate(to, from, next) {
@@ -137,7 +160,7 @@ export default {
 
 <style>
 .sidebar {
-  height: 100%;
+  height: 100vh;
   position: fixed;
   z-index: 4;
   top: 0;

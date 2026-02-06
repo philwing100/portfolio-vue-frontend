@@ -6,6 +6,10 @@
       <div class="date-picker-container">
         <label>Birth Date:</label>
         <DateInput v-model="startDate" />
+        <!-- weeks remaining text -->
+        <div class="weeks-remaining">
+          <em>{{ weeksRemaining }} weeks remaining, the future approaches</em>
+        </div>
       </div>
 
       <LifeCalendar :start-date="startDate" />
@@ -27,6 +31,19 @@ export default {
     return {
       startDate: '1990-01-01', // Default birth date
     };
+  },
+  computed: {
+    weeksSinceStart() {
+      const now = new Date();
+      const start = new Date(this.startDate);
+      const diffMs = now - start;
+      const weeks = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 7));
+      return Math.max(0, weeks);
+    },
+    weeksRemaining() {
+      const totalWeeks = 91 * 52; // matches LifeCalendar grid (91 rows * 52 weeks)
+      return Math.max(0, totalWeeks - this.weeksSinceStart);
+    }
   },
   mounted() {
     // Load saved birth date from localStorage if available
@@ -92,5 +109,55 @@ h1 {
   outline: none;
   border-color: var(--accentColor, #fff);
   box-shadow: 0 0 0 0.125rem rgba(255, 255, 255, 0.2);
+}
+
+/* small italicized info under the date selector */
+.weeks-remaining {
+  margin-top: 0.5rem;
+  color: var(--accentColor, #fff);
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+/* Mobile / small tablet */
+@media (max-width: 37.5rem) { /* 600px */
+  .stats-container {
+    padding: 1rem 0;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .date-picker-container {
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0 1rem;
+    width: 100%;
+  }
+
+  .date-input {
+    min-width: auto;
+    width: 100%;
+    max-width: 28rem;
+  }
+
+  .weeks-remaining {
+    font-size: 0.85rem;
+    text-align: left;
+    margin-left: 0.125rem;
+  }
+}
+
+@media (max-width: 23.75rem) { /* 380px */
+  h1 {
+    font-size: 1.15rem;
+  }
+
+  .date-input {
+    font-size: 0.95rem;
+    padding: 0.4rem 0.75rem;
+  }
 }
 </style>

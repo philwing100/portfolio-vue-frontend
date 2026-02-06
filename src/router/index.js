@@ -44,4 +44,20 @@ router.beforeEach(function beforeEach(to, from, next) {
   }
 });
 
+// Global after hook to manage the document title based on route
+router.afterEach((to) => {
+  if (typeof window === 'undefined') return;
+
+  const baseTitle = to.name === 'AboutMe' ? 'Portfolio' : 'Finish This';
+
+  // Store the base title so other parts of the app (e.g., pomodoro state)
+  // can restore it when needed.
+  window.__baseTitle = baseTitle;
+
+  // If the pomodoro timer is not actively controlling the title, update it now.
+  if (!window.__pomodoroRunning) {
+    document.title = baseTitle;
+  }
+});
+
 export default router;

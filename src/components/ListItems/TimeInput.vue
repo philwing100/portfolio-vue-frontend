@@ -48,9 +48,9 @@ export default {
   data() {
     return {
       isDropdownVisible: false,
-      selectedTime: this.modelValue || this.getNearestTime(),
+      selectedTime: this.modelValue || this.getDefaultTime(),
       formattedTime: '',
-      highlightedIndex: 0, // Track the currently highlighted index
+      highlightedIndex: 0,
     };
   },
   computed: {
@@ -64,18 +64,23 @@ export default {
           times.push(formattedTime);
         }
       }
-      return times.filter(time => {
-        return this.isTimeInRange(time);
-      });
+      // Filter based on minTime and maxTime
+      return times.filter(time => this.isTimeInRange(time));
     },
   },
   methods: {
+    getDefaultTime() {
+      // If modelValue exists, use it
+      if (this.modelValue) return this.modelValue;
+      
+      // Otherwise return current time rounded to nearest 30 min
+      return this.getNearestTime();
+    },
     getNearestTime() {
       const now = new Date();
       let minutes = Math.ceil(now.getMinutes() / 30) * 30;
       let hours = now.getHours();
       
-      // Handle minute overflow
       if (minutes >= 60) {
         minutes = 0;
         hours = (hours + 1) % 24;
@@ -98,7 +103,7 @@ export default {
       this.$nextTick(() => {
         const dropdown = this.$el.querySelector('.time-dropdown');
         if (dropdown) {
-          dropdown.scrollTop = this.highlightedIndex * dropdown.children[0].offsetHeight;
+          dropdown.scrollTop = this.highlightedIndex * dropdown.children[0].offsetHeight; // Scroll to the highlighted time
         }
       });
     },
@@ -179,8 +184,26 @@ export default {
   },
   watch: {
     modelValue(newValue) {
-      this.selectedTime = newValue;
-      this.formattedTime = newValue;
+      this.selectedTime = newValue || this.getDefaultTime();
+      this.formattedTime = this.selectedTime;
+    },
+    minTime() {
+      // Re-validate selected time when constraints change
+      if (!this.isTimeInRange(this.selectedTime)) {
+        const validTimes = this.selectableTimes;
+        if (validTimes.length > 0) {
+          this.selectTime(validTimes[0]);
+        }
+      }
+    },
+    maxTime() {
+      // Re-validate selected time when constraints change
+      if (!this.isTimeInRange(this.selectedTime)) {
+        const validTimes = this.selectableTimes;
+        if (validTimes.length > 0) {
+          this.selectTime(validTimes[validTimes.length - 1]);
+        }
+      }
     },
   },
   mounted() {

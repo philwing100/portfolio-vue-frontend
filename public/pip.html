@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Pomodoro PiP</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { margin:0; font-family: sans-serif; background:#1f2937; color:white; display:flex; align-items:center; justify-content:center; height:100vh; }
+    .card { padding:10px; border-radius:6px; width:280px; background:#111827; text-align:center; }
+    .clock { font-size:2rem; margin:8px 0; }
+    .controls { display:flex; gap:6px; justify-content:center; }
+    button { padding:6px 8px; background:#2563eb; border:none; color:white; border-radius:4px; cursor:pointer; }
+    .mode { font-size:0.9rem; opacity:0.9; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="mode" id="mode">Loading...</div>
+    <div class="clock" id="clock">--:--</div>
+    <div class="controls">
+      <button id="start">Start</button>
+      <button id="restart">Restart</button>
+      <button id="skip">Skip</button>
+    </div>
+  </div>
+
+  <script>
+    const bc = new BroadcastChannel('pomodoro_channel');
+    const modeEl = document.getElementById('mode');
+    const clockEl = document.getElementById('clock');
+    const btnStart = document.getElementById('start');
+    const btnRestart = document.getElementById('restart');
+    const btnSkip = document.getElementById('skip');
+
+    let state = {
+      isRunning: false,
+      mode: 'work',
+      startTimestamp: null,
+      pausedAt: null,
+      workDuration: 50 * 60,
+      breakDuration: 10 * 60,
+    };
+
+    // restore last known pomodoro state if available to avoid flashing to defaults
+    try {
+      const saved = JSON.parse(localStorage.getItem('pomodoro_state') || 'null');
+      if (saved) {
+        state = Object.assign({}, state, saved);
+        updateDisplay();
+      }
+    } catch (e) { /* ignore parse errors */ }
+
+    function sendState() {
+      // Send authoritative state to channel so other windows can sync and persist
+      bc.postMessage({ type: 'state', payload: Object.assign({}, state) });
+      try { localStorage.setItem('pomodoro_state', JSON.stringify(state)); } catch (e) {}
+    }
+
+    function updateDisplay() {
+      let remaining;
+      if (!state.startTimestamp) {
+        remaining = state.mode === 'work' ? state.workDuration : state.breakDuration;
+      } else if (state.isRunning) {
+        const elapsed = Math.floor((Date.now() - state.startTimestamp) / 1000);
+        remaining = Math.max(0, Math.floor((state.mode === 'work' ? state.workDuration : state.breakDuration) - elapsed));
+      } else {
+        const elapsed = Math.floor((state.pausedAt - state.startTimestamp) / 1000);
+        remaining = Math.max(0, Math.floor((state.mode === 'work' ? state.workDuration : state.breakDuration) - elapsed));
+      }
+      const m = String(Math.floor(remaining / 60)).padStart(2,'0');
+      const s = String(remaining % 60).padStart(2,'0');
+      clockEl.textContent = `${m}:${s}`;
+      modeEl.textContent = state.mode === 'work' ? 'Work' : 'Break';
+      btnStart.textContent = state.isRunning ? 'Pause' : 'Start';
+    }
+
+    bc.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg) return;
+      if (msg.type === 'state' && msg.payload) {
+        state = Object.assign({}, state, msg.payload);
+        try { localStorage.setItem('pomodoro_state', JSON.stringify(state)); } catch (e) {}
+        updateDisplay();
+      } else if (msg.type === 'close') {
+        window.close();
+      } else if (msg.type === 'pip_status' && msg.payload) {
+        // keep state of pip status (not strictly necessary here)
+      } else if (msg.type === 'request_state') {
+        // If someone requests the current state (e.g. Dashboard mounting), reply with current state
+        sendState();
+      }
+    };
+
+    // ask for initial state
+    bc.postMessage({ type: 'request_state' });
+
+    // update display frequently
+    setInterval(updateDisplay, 500);
+
+    // button handlers send commands to main via channel and also broadcast full state
+    btnStart.addEventListener('click', () => {
+      // Toggle start/pause with correct timestamp handling
+      if (state.isRunning) {
+        state.pausedAt = Date.now();
+        state.isRunning = false;
+        bc.postMessage({ type: 'command', cmd: 'pause' });
+      } else {
+        if (!state.startTimestamp) {
+          state.startTimestamp = Date.now();
+        } else if (state.pausedAt) {
+          state.startTimestamp += Date.now() - state.pausedAt;
+          state.pausedAt = null;
+        }
+        state.isRunning = true;
+        bc.postMessage({ type: 'command', cmd: 'start' });
+      }
+      sendState(); // make sure everyone gets updated immediately
+      updateDisplay();
+    });
+    btnRestart.addEventListener('click', () => {
+      state.startTimestamp = Date.now();
+      state.pausedAt = null;
+      state.isRunning = true;
+      bc.postMessage({ type: 'command', cmd: 'restart' });
+      sendState();
+      updateDisplay();
+    });
+    btnSkip.addEventListener('click', () => {
+      // follow same behavior as dashboard: switch mode but stay paused so dashboard shows 'Start'
+      state.mode = state.mode === 'work' ? 'break' : 'work';
+      state.startTimestamp = Date.now();
+      state.pausedAt = state.startTimestamp;
+      state.isRunning = false;
+      bc.postMessage({ type: 'command', cmd: 'skip' });
+      sendState();
+      updateDisplay();
+    });
+
+    // close behavior: if main page closed, it will post 'close' and this window will close.
+    window.addEventListener('unload', () => {
+      bc.close();
+    });
+  </script>
+</body>
+</html>

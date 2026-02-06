@@ -15,9 +15,38 @@
     </div>
 
     <div class="page-container" :style="{ 'background-color': 'var(--primaryColor)' }">
-      <div class="lists-container">
-        <DailyCalendar v-model:list2="dailyList" :date="currentDate" />
-        <ListElement listName="Daily List" v-model="dailyList" :initialDate="currentDate" />
+      <div
+        class="lists-container"
+        @touchstart="handleTouchStart"
+        @touchend="handleTouchEnd"
+      >
+        <!-- Pomodoro is only visible on non-mobile layouts -->
+        <Pomodoro v-if="!isMobile" />
+
+        <!-- Desktop / tablet: show calendar and list side by side -->
+        <template v-if="!isMobile">
+          <DailyCalendar v-model:lists="dailyLists" :date="currentDate" />
+          <ListElement
+            listName="Daily List"
+            v-model="dailyLists"
+            :initialDate="currentDate"
+          />
+        </template>
+
+        <!-- Mobile: only one of calendar or list is visible at a time -->
+        <template v-else>
+          <DailyCalendar
+            v-if="activeMobileView === 'calendar'"
+            v-model:lists="dailyLists"
+            :date="currentDate"
+          />
+          <ListElement
+            v-else
+            listName="Daily List"
+            v-model="dailyLists"
+            :initialDate="currentDate"
+          />
+        </template>
       </div>
     </div>
   </div>
@@ -32,12 +61,14 @@ import DailyCalendar from '@/components/CalendarComponents/DailyCalendar.vue';
 import DateInput from '@/components/ListItems/DateInput.vue';
 import './cssViews/Dashboard.css';
 import MultiplayerToggle from '@/components/DashboardComponents/MultiplayerToggle.vue';
+import Pomodoro from '@/components/LearnComponents/Pomodoro.vue';
 import { getTodayDate, incrementDate, decrementDate } from '../date.js'
-import { mapState } from 'vuex'; // Importing Vuex to access state
+import { mapState } from 'vuex';
 
 export default {
   name: 'DashboardWorld',
   components: {
+    Pomodoro,
     ListElement,
     DailyCalendar,
     DateInput,
@@ -46,23 +77,21 @@ export default {
   data() {
     return {
       colors: colors,
-      dailyList: [],
+      dailyLists: [],
       currentDate: getTodayDate(),
       isChecked: false,
+      isMobile: false,
+      activeMobileView: 'list', // 'list' or 'calendar' when on mobile
+      touchStartX: 0,
+      touchStartY: 0,
     };
   },
   computed: {
     ...mapState(['isAuthenticated', 'user']),
   },
-  watch: {
-    dailyList(newVal) {
-      //console.log('Daily list updated:', newVal);
-    }
-  },
   methods: {
     handleDateChange(date) {
-      this.scheduledDate = date;
-      this.itemsArray[this.selectedItemIndex].scheduledDate = date;
+      this.currentDate = date;
     },
     decrementDay() {
       this.currentDate = decrementDate(this.currentDate);
@@ -73,9 +102,49 @@ export default {
     onEventClicked({ event, listType, index }) {
       console.log(`Event clicked:`, event);
     },
+    updateIsMobile() {
+      this.isMobile = window.innerWidth <= 768;
+      // Ensure a valid default when switching into mobile view
+      if (this.isMobile && !['list', 'calendar'].includes(this.activeMobileView)) {
+        this.activeMobileView = 'list';
+      }
+    },
+    handleTouchStart(event) {
+      if (!this.isMobile || !event.changedTouches || event.changedTouches.length === 0) return;
+      const touch = event.changedTouches[0];
+      this.touchStartX = touch.screenX;
+      this.touchStartY = touch.screenY;
+    },
+    handleTouchEnd(event) {
+      if (!this.isMobile || !event.changedTouches || event.changedTouches.length === 0) return;
+
+      const touch = event.changedTouches[0];
+      const deltaX = touch.screenX - this.touchStartX;
+      const deltaY = touch.screenY - this.touchStartY;
+
+      const horizontalThreshold = 50; // minimum px to consider it a swipe
+
+      // Ignore if swipe is too small or mostly vertical
+      if (Math.abs(deltaX) < horizontalThreshold || Math.abs(deltaX) < Math.abs(deltaY)) {
+        return;
+      }
+
+      // Swipe left from list -> calendar
+      if (deltaX < 0 && this.activeMobileView === 'list') {
+        this.activeMobileView = 'calendar';
+      }
+      // Swipe right from calendar -> list
+      else if (deltaX > 0 && this.activeMobileView === 'calendar') {
+        this.activeMobileView = 'list';
+      }
+    },
   },
   mounted() {
-
+    this.updateIsMobile();
+    window.addEventListener('resize', this.updateIsMobile);
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.updateIsMobile);
   }
 };
 </script>

@@ -164,16 +164,16 @@ export default {
 .calendar-grid {
   display: flex;
   flex-direction: column;
-  background: var(--secondaryColor);
+  background: transparent; /* was var(--secondaryColor) -> make transparent */
   border-radius: 0.5rem;
   padding: 0.5rem 0.25rem;
-  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+  box-shadow: none; /* remove shadow so it sits directly on page background */
 }
 
 .calendar-row {
   display: flex;
   align-items: center;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.4rem; /* increased vertical spacing between rows */
 }
 
 .calendar-row-label {
@@ -200,10 +200,10 @@ export default {
   min-height: 1.125rem;
   max-width: 2rem;
   max-height: 2rem;
-  background: var(--primaryColor);
+  background: transparent; /* make unfilled cells transparent */
   border-radius: 0.2rem;
   border: 0.0625rem solid var(--secondaryColor);
-  margin-right: 0.125rem;
+  margin-right: 0.3rem; /* increased horizontal spacing between cells */
   transition: all 0.3s ease;
   cursor: pointer;
   position: relative;
@@ -236,7 +236,7 @@ export default {
 }
 
 .calendar-cell.filled {
-  background: var(--accentColor);
+  background: var(--accentColor); /* filled cells remain highlighted */
   border: 0.0625rem solid var(--accentColor);
 }
 
@@ -323,30 +323,82 @@ export default {
   }
 }
 
-@media (max-width: 56.25rem) {
+/* Tablet and below: stack columns and allow scroll where appropriate */
+@media (max-width: 56.25rem) { /* 900px - slightly larger tablet breakpoint */
+  .calendar-columns {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+  }
 
-  .calendar-header-cell,
-  .calendar-row-label,
-  .calendar-cell {
-    min-width: 0.75rem;
-    max-width: 1.125rem;
-    min-height: 0.75rem;
-    max-height: 1.125rem;
-    font-size: 0.7rem;
+  .calendar-grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .calendar-grid {
+    padding: 0.25rem;
+    display: inline-block; /* allow horizontal scroll of grid content */
+  }
+
+  .header-row-cells {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+}
+
+/* Mobile: reduce cell sizes and spacing */
+@media (max-width: 37.5rem) { /* 600px */
+  .calendar-row {
+    margin-bottom: 0.32rem;
   }
 
   .calendar-row-label {
+    width: 1.6rem;
+    min-width: 1.2rem;
+    font-size: 0.75rem;
+    margin-right: 0.35rem;
+  }
+
+  .calendar-cell,
+  .header-row-cell {
+    width: 0.95rem;
+    height: 0.95rem;
+    min-width: 0.75rem;
     min-height: 0.75rem;
-    max-height: 1.125rem;
+    margin-right: 0.18rem;
   }
 
-  .calendar-columns {
-    gap: 1rem;
-    max-width: 98vw;
+  .header-row-cell {
+    margin-right: 0.18rem;
+    font-size: 0.75rem;
   }
 
-  .calendar-cell:hover {
-    transform: scale(1.1);
+  .flame-1 { width: 0.65rem; height: 1rem; }
+  .flame-2 { width: 0.5rem; height: 0.8rem; }
+  .flame-3 { width: 0.35rem; height: 0.65rem; }
+}
+
+/* Very small phones: tighten further */
+@media (max-width: 22.5rem) { /* 360px */
+  .calendar-cell,
+  .header-row-cell {
+    width: 0.85rem;
+    height: 0.85rem;
+    margin-right: 0.12rem;
+  }
+
+  .header-row-cell {
+    font-size: 0.7rem;
+  }
+
+  .arrow {
+    font-size: 1.6rem;
+  }
+
+  .calendar-age-label span {
+    font-size: 0.95rem;
   }
 }
 
@@ -373,8 +425,8 @@ export default {
   max-height: 2rem;
   background: transparent !important;
   border-radius: 0.2rem;
-  border: 0.0625rem solid var(--secondaryColor);
-  margin-right: 0.125rem;
+  border: 0.0625rem solid transparent;
+  margin-right: 0.3rem; /* match spacing with cells */
   font-size: 0.85rem;
   color: var(--accentColor);
   font-weight: 600;

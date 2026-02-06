@@ -14,33 +14,46 @@
 
 <script>
 export default {
-  name: 'PrettyButton',
+  name: 'CheckBoxOneWay',
+  props: {
+    checked: {
+      type: Boolean,
+      default: false,
+    },
+  },
   data() {
     return {
-      isChecked: false, // Keeps track of whether the button is "checked"
+      isChecked: this.checked,
+      isHovering: false,
     };
+  },
+  watch: {
+    checked(newVal) {
+      this.isChecked = newVal;
+    },
   },
   computed: {
     buttonLabel() {
-      // Label changes based on whether the button is checked
-      return this.isChecked ? '✓' : '';
+      // Show a checkmark when checked or while hovering
+      return (this.isChecked || this.isHovering) ? '✓' : '';
     }
   },
   methods: {
     emitButtonChange() {
       this.$emit('checkbox-toggled', this.isChecked); // Emit the checked state to the parent
     },
-    hoverButton(event) {
+    hoverButton() {
       // Temporarily show the checkmark on hover
-      event.target.innerHTML = '✓';
+      this.isHovering = true;
     },
-    resetButton(event) {
+    resetButton() {
       // Reset the button to its actual checked state after hover
-      event.target.innerHTML = '';
+      this.isHovering = false;
     },
     toggleCheck() {
       // Permanently check or uncheck the button on click
       this.isChecked = !this.isChecked;
+      this.isHovering = false;
       this.emitButtonChange();
     }
   }

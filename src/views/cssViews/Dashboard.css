@@ -59,6 +59,7 @@ html, body {
   border-right: 0.0625rem solid #ccc;
   box-sizing: border-box;
   height: 100%; /* Ensure it stretches to fill the remaining height */
+  align-items: center; /* center children vertically (Pomodoro) */
 }
 
 /* Each ListElement should take 1/4 of the page width */
@@ -69,4 +70,25 @@ html, body {
 /* Ensure no horizontal scroll */
 body {
   overflow-x: hidden;
+}
+
+/* Mobile layout adjustments */
+@media (max-width: 768px) {
+  .top-row {
+    padding: 0 0.5rem;
+  }
+
+  .page-container {
+    height: calc(100vh - 10vh);
+  }
+
+  .lists-container {
+    width: 100%;
+    flex-direction: column;
+    background-color: transparent;
+  }
+
+  .lists-container > * {
+    flex: 1 0 100%;
+  }
 }

@@ -31,19 +31,20 @@
           />
         </div>
       </div>
-      <DownwardExpandContent label="Color">
-        <ColorPicker v-model="localEvent.color" />
-      </DownwardExpandContent>
     </div>
     <div class="event-card-footer">
-      <Button class="more-btn" @click="toggleDrawer">More Options</Button>
+      <Button class="more-btn" @click="toggleDrawer" aria-label="List settings">
+        ⚙
+      </Button>
       <Button class="save-btn" @click="saveEvent">Save</Button>
     </div>
     <Drawer
       v-if="drawerOpen"
       :event="localEvent"
+      :listTitle="list ? list.title : ''"
+      :color="list && list.color ? list.color : localEvent.color"
       @close="drawerOpen = false"
-      @insert="handleDrawerInsert"
+      @update-list-color="handleDrawerListColor"
     />
   </div>
 </template>
@@ -75,10 +76,15 @@ export default {
         endingTime: '',
         color: '#2196f3',
       }),
+    list: {
+      type: Object,
+      default: () => null,
+    },
     },
     eventPosition: {
       type: Object,
-      default: () => ({ top: 200, left: 200, height: 40 }),
+      // top/left are numeric pixel values relative to the calendar content
+      default: () => ({ top: 200, left: 200 }),
     },
   },
   data() {
@@ -89,10 +95,9 @@ export default {
   },
   computed: {
     cardPositionStyle() {
-      // Shift upward by 32px but keep inside viewport
       const shift = 32;
       let top = this.eventPosition.top - shift;
-      if (top < 0) top = this.eventPosition.top; // Don't go above page
+      if (top < 0) top = 0;
       return {
         position: 'absolute',
         left: `${this.eventPosition.left}px`,
@@ -124,9 +129,8 @@ export default {
     toggleDrawer() {
       this.drawerOpen = !this.drawerOpen;
     },
-    handleDrawerInsert(data) {
-      this.$emit('save', { ...data });
-      this.drawerOpen = false;
+    handleDrawerListColor(color) {
+      this.$emit('update-list-color', color);
     },
     
   },

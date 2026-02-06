@@ -2,13 +2,15 @@
   <div class="drawer-overlay" @click.self="closeDrawer">
     <div class="drawer-sheet">
       <div class="drawer-header">
-        <span class="drawer-title">More Options</span>
+        <span class="drawer-title">{{ listTitle || 'List Settings' }}</span>
         <Button class="drawer-close-btn" @click="closeDrawer">✕</Button>
       </div>
       <div class="drawer-body">
-        <!-- Example: Insert event to calendar lists -->
-        <Button class="drawer-insert-btn" @click="insertEvent">Insert Event</Button>
-        <!-- Add more input options here as needed -->
+        <div class="drawer-section">
+          <label class="drawer-label">Event Color</label>
+          <ColorPicker v-model="localColor" />
+        </div>
+        <Button class="drawer-save-btn" @click="saveChanges">Save</Button>
       </div>
     </div>
   </div>
@@ -16,22 +18,45 @@
 
 <script>
 import Button from '../GeneralComponents/Button.vue';
+import ColorPicker from '../SettingsComponents/ColorPicker.vue';
 
 export default {
   name: 'Drawer',
-  components: { Button },
+  components: { Button, ColorPicker },
   props: {
     event: {
       type: Object,
       required: true,
     },
+    listTitle: {
+      type: String,
+      default: '',
+    },
+    color: {
+      type: String,
+      default: '#2196f3',
+    },
+  },
+  data() {
+    return {
+      localColor: this.color,
+    };
   },
   methods: {
     closeDrawer() {
       this.$emit('close');
     },
-    insertEvent() {
-      this.$emit('insert', { ...this.event });
+    emitColor() {
+      this.$emit('update-list-color', this.localColor);
+    },
+    saveChanges() {
+      this.emitColor();
+      this.closeDrawer();
+    },
+  },
+  watch: {
+    color(newVal) {
+      this.localColor = newVal;
     },
   },
 };
@@ -90,7 +115,17 @@ export default {
   gap: 1rem;
 }
 
-.drawer-insert-btn {
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.drawer-label {
+  font-size: 0.875rem;
+  color: var(--accentColor);
+}
+.drawer-save-btn {
   background: var(--accentColor);
   color: var(--primaryColor);
   border-radius: 0.25rem;
@@ -99,7 +134,7 @@ export default {
   border: none;
   cursor: pointer;
 }
-.drawer-insert-btn:hover {
+.drawer-save-btn:hover {
   background: var(--secondaryColor);
   color: var(--accentColor);
 }
