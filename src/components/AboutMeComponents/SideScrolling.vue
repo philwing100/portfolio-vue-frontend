@@ -1,40 +1,17 @@
 <template>
   <div id="scroll-container">
     <div id="scroll-track">
-      <!-- Original Set of Icons -->
+      <!-- Repeated sets for a smooth, continuous loop -->
       <font-awesome-icon
-        v-for="(icon, index) in icons"
-        :key="index"
-        :icon="['fab', icon.name]"
-        :style="{ color: icon.color }"
-        class="scroll-icon"
-      />
-      <!-- Duplicate Set for Smooth Looping -->
-      <font-awesome-icon
-        v-for="(icon, index) in icons"
-        :key="'duplicate-' + index"
-        :icon="['fab', icon.name]"
-        :style="{ color: icon.color }"
-        class="scroll-icon"
-      />
-
-      <font-awesome-icon
-        v-for="(icon, index) in icons"
-        :key="'triplicate-' + index"
-        :icon="['fab', icon.name]"
-        :style="{ color: icon.color }"
-        class="scroll-icon"
-      />
-
-      <font-awesome-icon
-        v-for="(icon, index) in icons"
-        :key="'quadriplicate-' + index"
-        :icon="['fab', icon.name]"
+        v-for="(icon, index) in repeatedIcons"
+        :key="icon.key + '-' + index"
+        :icon="[icon.prefix, icon.name]"
         :style="{ color: icon.color }"
         class="scroll-icon"
       />
     </div>
   </div>
+  
 </template>
 
 <script>
@@ -50,8 +27,11 @@ import {
   faGithub,
   faGitAlt,
   faMicrosoft,
-  faLinux
+  faLinux,
+  faPython,
+  faUbuntu
 } from "@fortawesome/free-brands-svg-icons";
+import { faDatabase, faTerminal, faCode, faRobot } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
   faJs,
@@ -63,7 +43,13 @@ library.add(
   faGithub,
   faGitAlt,
   faMicrosoft,
-  faLinux
+  faLinux,
+  faPython,
+  faUbuntu,
+  faDatabase,
+  faTerminal,
+  faCode,
+  faRobot
 );
 
 export default {
@@ -72,19 +58,47 @@ export default {
   },
   data() {
     return {
+      // Icons chosen to reflect Languages, Technologies, and Developer Tools
       icons: [
-        { name: "js", color: "#f7df1e" },
-        { name: "html5", color: "#e34f26" },
-        { name: "css3", color: "#1572b6" },
-        { name: "node-js", color: "#83cd29" },
-        { name: "vuejs", color: "#42b883" },
-        { name: "java", color: "#f89820" },
-        { name: "git-alt", color: "#f34f29" },
-        { name: "github", color: "#000000" },
-        { name: "linux", color: "#000000" },
-      ]
+        // Languages
+        { key: 'js',       prefix: 'fab', name: 'js',       color: '#f7df1e' }, // JavaScript
+        { key: 'python',   prefix: 'fab', name: 'python',   color: '#3776AB' }, // Python
+        { key: 'java',     prefix: 'fab', name: 'java',     color: '#f89820' }, // Java
+
+        // Data / SQL (generic DB icon)
+        { key: 'database', prefix: 'fas', name: 'database', color: '#4DB6AC' },
+
+        // Web stack
+        { key: 'html5',    prefix: 'fab', name: 'html5',    color: '#e34f26' },
+        { key: 'css3',     prefix: 'fab', name: 'css3',     color: '#1572b6' },
+        { key: 'node',     prefix: 'fab', name: 'node-js',  color: '#83cd29' },
+        { key: 'vue',      prefix: 'fab', name: 'vuejs',    color: '#42b883' },
+
+        // OS / platforms
+        { key: 'ubuntu',   prefix: 'fab', name: 'ubuntu',   color: '#dd4814' },
+        { key: 'linux',    prefix: 'fab', name: 'linux',    color: '#000000' },
+        { key: 'windows',  prefix: 'fab', name: 'microsoft',color: '#00a4ef' },
+
+        // Developer tools
+        { key: 'git',      prefix: 'fab', name: 'git-alt',  color: '#f34f29' },
+        { key: 'github',   prefix: 'fab', name: 'github',   color: '#ffffff' },
+        { key: 'terminal', prefix: 'fas', name: 'terminal', color: '#f0db4f' }, // BASH / shell
+        { key: 'code',     prefix: 'fas', name: 'code',     color: '#42a5f5' }, // Editors / VS Code
+        { key: 'robot',    prefix: 'fas', name: 'robot',    color: '#9c27b0' }, // Generative AI
+      ],
     };
-  }
+  },
+  computed: {
+    repeatedIcons() {
+      // Duplicate the sequence a few times so the marquee looks continuous
+      return [
+        ...this.icons,
+        ...this.icons,
+        ...this.icons,
+        ...this.icons,
+      ];
+    },
+  },
 };
 </script>
 

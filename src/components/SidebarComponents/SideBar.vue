@@ -9,8 +9,15 @@
   </div>
   <div :style="{ width: sidebarWidth + 'rem' }" class="sidebar">
     <nav class="needPadding">
-      <router-link v-for="(route, index) in routes" :to="route.path" :key="index" ref="routerLinks" class="sidebarItem"
-        :class="{ 'active': $route.path === route.path }" @click="setActiveItem(route.path)">
+      <router-link
+        v-for="(route, index) in routes"
+        :to="route.path"
+        :key="index"
+        ref="routerLinks"
+        class="sidebarItem"
+        :class="{ 'active': $route.path === route.path }"
+        @click="route.isAuth ? handleAuthClick : setActiveItem(route.path)"
+      >
         {{ route.label }}
       </router-link>
     </nav>
@@ -19,19 +26,34 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue';
+import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 
 export default {
   name: 'SideBar',
   setup() {
-    const routes = [
+    const store = useStore();
+    const router = useRouter();
+
+    const isAuthenticated = computed(() => store.state.isAuthenticated);
+
+    const baseRoutes = [
       { path: '/', label: 'Dashboard' },
       { path: '/Streaks', label: 'Streaks' },
       { path: '/About-me', label: 'About Me' },
       { path: '/Stats', label: 'Stats' },
       { path: '/Settings', label: 'Settings' },
-      { path: '/Login', label: 'Login' },
     ];
+
+    const routes = computed(() => [
+      ...baseRoutes,
+      {
+        path: '/login',
+        label: isAuthenticated.value ? 'Logout' : 'Login',
+        isAuth: true,
+      },
+    ]);
 
     const getColorVar = (name, fallback) =>
       getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -66,6 +88,22 @@ export default {
 
     const setActiveItem = (item) => {
       activeItem.value = item;
+    };
+
+    const handleAuthClick = async (event) => {
+      if (!event) return;
+      event.preventDefault();
+
+      if (isAuthenticated.value) {
+        try {
+          await store.dispatch('logout');
+          await router.push({ name: 'Login' });
+        } catch (error) {
+          console.warn('Logout error from sidebar:', error);
+        }
+      } else {
+        router.push({ name: 'Login' });
+      }
     };
 
     const handleEscapeKey = (event) => {
@@ -148,7 +186,9 @@ export default {
       setActiveItem,
       sidebarColors,
       routerLinks,
-      isMobile
+      isMobile,
+      handleAuthClick,
+      isAuthenticated,
     };
   },
   beforeRouteUpdate(to, from, next) {

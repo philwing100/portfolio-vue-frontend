@@ -4,6 +4,7 @@ import Lists from '@/views/Lists.vue';
 import Settings from '@/views/Settings.vue';
 import Habits from '@/views/Habits.vue';
 import Stats from '@/views/Stats.vue';
+import ProjectDetail from '@/views/ProjectDetail.vue';
 
 export default [
   /*{
@@ -20,6 +21,12 @@ export default [
     path: '/Stats',
     name: 'StatsPage',
     component: Stats
+  },
+  {
+    path: '/projects/:slug',
+    name: 'ProjectDetail',
+    component: ProjectDetail,
+    props: true,
   },
   /*{
     path: '/type',

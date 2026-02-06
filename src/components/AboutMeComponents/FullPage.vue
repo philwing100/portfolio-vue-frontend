@@ -17,24 +17,25 @@
       <ConnectWithMe v-if="(index === 3 && activeSection === 3)" :isBlack="false" />
       <Experience  v-if="(index === 3 && activeSection === 3)" :experiences="[
         {
-          title: 'Software Developer Intern',
-          company: 'zdSCADA',
-          date: 'Sep 2024 - Dec 2024',
+          title: 'Software Engineer',
+          company: 'Heartland National TB Center',
+          date: 'July 2025 - Present',
           bulletPoints: [
-            'Developed and maintained a C# .NET backend, Vue.js frontend, and SQL Server database to support application functionality.',
-            'Played an active role in sprint planning and agile development.',
-            'Used Azure Devops to manage branches, user stories, pull requests, and merges.',
-            'Improved website stability by implementing backend API endpoints and resolving frontend UI bugs.'
+            'Translate medical requirements from doctors and nurses into technical solutions used in production.',
+            'Use C#, JavaScript, and MS SQL to build a consultation database receiving 1,600+ consultations per year.',
+            'Work with IT operations leadership to secure resources and deploy solutions reliably.',
+            'Aggregate data from website forms into a single cloud-accessible source of truth.'
           ]
         },
         {
-          title: 'A/V Tech',
-          company: 'UT Tyler',
-          date: 'Aug 2022 - Sep 2024',
+          title: 'Software Engineer Intern',
+          company: 'zdSCADA',
+          date: 'Sep 2024 - Dec 2024',
           bulletPoints: [
-            'Demonstrated proficiency in providing technical support to all malfunctioning devices.',
-            'Decreased A/V event setup time by 30% from previous.',
-            'Ensured smooth technology operations for events of up to 200 people.'
+            'Built full-stack services using C# .NET, Vue.js, and MS SQL Server for industrial SCADA systems.',
+            'Implemented a backend logging solution that surfaced critical defects early and reduced production incidents.',
+            'Enhanced site stability and performance by adding API endpoints and fixing UI bugs across multiple views.',
+            'Utilized Azure DevOps for branch management, user stories, and streamlined pull request workflows.'
           ]
         }
       ]" />
@@ -140,6 +141,11 @@ export default {
   },
   mounted() {
     this.$nextTick(() => {
+      // If routed here with a specific section (e.g. from a project detail), honor that
+      const sectionFromRoute = this.$route && this.$route.query && this.$route.query.section;
+      if (sectionFromRoute === 'projects') {
+        this.activeSection = 2; // index of "Featured Projects" in sections array
+      }
       this.applyGradients();
       this.scrollToSection(this.activeSection);
     });
@@ -221,8 +227,9 @@ export default {
   padding-right: 100%;
 }
 
-.pageButtons:hover {
+.button-container:hover .pageButtons {
+  /* Make the text slide out and become visible when hovering the whole button area */
   transform: translateX(-20%);
-  opacity: 1.0;
+  opacity: 1;
 }
 </style>

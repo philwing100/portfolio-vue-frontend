@@ -23,7 +23,7 @@
         <div
           v-for="(event, index) in combinedEvents"
           :key="`${event.listIndex}-${event.itemIndex}`"
-          :class="['event', { 'event-complete': event.complete }]"
+          :class="['event', eventSizeClass(event), { 'event-complete': event.complete }]"
           :style="getEventDynamicStyle(event)"
           @mousedown.stop.prevent="handleEventMouseDown(event, index, $event)"
         >
@@ -441,6 +441,24 @@ export default {
         boxShadow: overlapIndex > 0 ? '0 0 0 2px var(--secondaryColor)' : 'none',
       };
     },
+    getEventDurationMinutes(event) {
+      if (!event) return 0;
+      if (event.taskTimeEstimate) {
+        return Math.max(1, Math.round(event.taskTimeEstimate));
+      }
+      const start = this.timeStringToMinutes(event.scheduledTime || event.scheduledStartTime || '');
+      const end = this.timeStringToMinutes(event.endingTime || event.scheduledEndTime || '');
+      if (end && end > start) {
+        return end - start;
+      }
+      return 60;
+    },
+    eventSizeClass(event) {
+      const duration = this.getEventDurationMinutes(event);
+      if (duration <= 15) return 'event--short';
+      if (duration <= 40) return 'event--medium';
+      return 'event--long';
+    },
     handleEventMouseDown(event, index, mouseEvent) {
       this.mouseDownOnEmptySpace = false;
       
@@ -700,6 +718,39 @@ export default {
   font-size: 1rem;
   transition: background-color 0.2s;
   position: absolute;
+}
+
+.event-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  padding-right: 0.5rem;
+}
+
+.event-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.event-time {
+  font-size: 0.75rem;
+}
+
+.event--short .event-content,
+.event--medium .event-content {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.event--short .event-time {
+  font-size: 0.65rem;
+}
+
+.event--long .event-content {
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 /* drag handles */
