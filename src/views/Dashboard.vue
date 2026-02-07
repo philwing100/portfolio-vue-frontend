@@ -64,6 +64,9 @@ import MultiplayerToggle from '@/components/DashboardComponents/MultiplayerToggl
 import Pomodoro from '@/components/LearnComponents/Pomodoro.vue';
 import { getTodayDate, incrementDate, decrementDate } from '../date.js'
 import { mapState } from 'vuex';
+import { getList, createList } from '../api.js';
+
+const DASHBOARD_LIST_STORAGE_PREFIX = 'dashboard-list-object:';
 
 export default {
   name: 'DashboardWorld',
@@ -88,6 +91,18 @@ export default {
   },
   computed: {
     ...mapState(['isAuthenticated', 'user']),
+  },
+  watch: {
+    async currentDate(newDate, oldDate) {
+      if (oldDate && newDate !== oldDate) {
+        await this.persistDateState(oldDate);
+        this.clearDashboardState();
+      }
+
+      if (newDate) {
+        this.loadDateState(newDate);
+      }
+    },
   },
   methods: {
     handleDateChange(date) {
@@ -138,10 +153,81 @@ export default {
         this.activeMobileView = 'list';
       }
     },
+    getStorageKey(date) {
+      return `${DASHBOARD_LIST_STORAGE_PREFIX}${date}`;
+    },
+    async persistDateState(date) {
+      try {
+        const listObject = {
+          parent_page: 'dashboard',
+          date,
+          lists: Array.isArray(this.dailyLists)
+            ? JSON.parse(JSON.stringify(this.dailyLists))
+            : [],
+        };
+
+        localStorage.setItem(this.getStorageKey(date), JSON.stringify(listObject));
+
+        await this.$store.dispatch('checkAuth');
+        await createList(listObject);
+      } catch (error) {
+        console.warn('Failed to persist dashboard state:', error);
+      }
+    },
+    clearDashboardState() {
+      this.dailyLists = [];
+    },
+    hydrateFromLocalStorage(date) {
+      try {
+        const raw = localStorage.getItem(this.getStorageKey(date));
+        if (!raw) return false;
+
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.lists)) {
+          this.dailyLists = JSON.parse(JSON.stringify(parsed.lists));
+          return true;
+        }
+      } catch (error) {
+        console.warn('Failed to hydrate dashboard state:', error);
+      }
+
+      return false;
+    },
+    normalizeLists(lists) {
+      return lists.map((list, index) => ({
+        title: list.title || `List ${index + 1}`,
+        items: Array.isArray(list.items) ? list.items : [],
+        visible: list.visible !== false,
+        color: list.color || '#2196f3',
+      }));
+    },
+    async refreshFromBackend(date) {
+      try {
+        await this.$store.dispatch('checkAuth');
+        const response = await getList({ parent_page: 'dashboard', date });
+        const data = response && response.data;
+
+        if (data && Array.isArray(data.lists)) {
+          const normalized = this.normalizeLists(data.lists);
+          this.dailyLists = normalized;
+          localStorage.setItem(
+            this.getStorageKey(date),
+            JSON.stringify({ parent_page: 'dashboard', date, lists: normalized })
+          );
+        }
+      } catch (error) {
+        console.warn('Failed to refresh dashboard lists:', error);
+      }
+    },
+    async loadDateState(date) {
+      this.hydrateFromLocalStorage(date);
+      await this.refreshFromBackend(date);
+    },
   },
   mounted() {
     this.updateIsMobile();
     window.addEventListener('resize', this.updateIsMobile);
+    this.loadDateState(this.currentDate);
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.updateIsMobile);

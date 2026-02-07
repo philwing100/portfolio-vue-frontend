@@ -58,7 +58,7 @@
     <div class="ListContainer">
       <ul class="ListItem">
         <li v-for="(item, index) in currentItems" :key="index" draggable="true" @dragstart="dragStart(index)"
-          :style="index === selectedItemIndex ? 'border: 3px solid blue; border-radius:5px; transition: border-color 0.1s ease;' : 'border: 3px solid transparent;'"
+          :style="index === selectedItemIndex ? 'border: 3px solid var(--accentColor); border-radius:5px; transition: border-color 0.1s ease;' : 'border: 3px solid transparent;'"
           @dragover="dragOver" @drop="drop(index)">
           <div class="item-container" @click="focusEditable(index);">
             <CheckBoxOneWay
@@ -134,22 +134,15 @@ import BooleanSlider from './BooleanSlider.vue';
 import CheckBoxOneWay from './CheckboxOneWay.vue';
 import TimeInput from './TimeInput.vue';
 import MinuteInput from './MinuteInput.vue';
-import { createList, getList } from '../../api.js';
 import './ListElement.css';
-import { getTodayDate, normalizeDate } from '../../date.js';
+import { getTodayDate } from '../../date.js';
 import { mapState } from 'vuex';
 import { debounce } from 'lodash';
 import ContextMenu from '../ContextMenu.vue';
 
-const debouncedCreateList = debounce((listData) => {
-  createList(listData)
-    .then((response) => {
-      console.log('Created list:', response);
-    })
-    .catch((error) => {
-      console.error('Failed to create list:', error);
-    });
-}, 750);
+const debouncedEmitLists = debounce((emitFn) => {
+  emitFn();
+}, 150);
 
 export default {
   name: 'ListElement',
@@ -246,9 +239,9 @@ export default {
         this.updateListVisibility(newIndex, oldIndex);
       }
     },
-    initialDate() {
-      if (this.listName != 'Backburner') {
-        this.fetchList();
+    initialDate(newDate, oldDate) {
+      if (this.listName != 'Backburner' && newDate && newDate !== oldDate) {
+        this.resetForDateChange();
       }
     },
     'editingTemp.scheduledStartTime'() {
@@ -316,6 +309,21 @@ export default {
     },
   },
   methods: {
+    resetForDateChange() {
+      this.lists = [
+        {
+          title: this.listName || 'List 1',
+          items: [this.createNewItem('')],
+          visible: true,
+          color: '#2196f3',
+        },
+      ];
+      this.currentListIndex = 0;
+      this.selectedItemIndex = 0;
+      this.editingIndex = null;
+      this.editingTemp = null;
+      this.emitLists();
+    },
     updateListVisibility(newIndex, oldIndex) {
       this.lists.forEach((list, index) => {
         list.visible = (index === newIndex);
@@ -548,114 +556,14 @@ export default {
       };
     },
     async saveList() {
-      // Build a full "list object" for this page/day so the backend
-      // can persist everything the dashboard and DailyCalendar need.
-      // This uses the same structure as the `dailyLists` object in Dashboard.vue.
-      const sanitizedLists = this.lists.map((list) => {
-        const items = Array.isArray(list.items) ? list.items : [];
-
-        // Drop a single leading empty item (placeholder row) from each list
-        const trimmedItems =
-          items.length > 0 && (items[0].textString === '' || items[0].textString === null)
-            ? items.slice(1)
-            : items;
-
-        return {
-          title: list.title,
-          visible: list.visible !== false,
-          color: list.color || '#2196f3',
-          items: trimmedItems,
-        };
-      });
-
-      const listData = {
-        parent_page: this.parentPage || 'dashboard',
-        date: this.initialDate,
-        lists: sanitizedLists,
-      };
-
-      debouncedCreateList(listData);
-      // Only emit if lists have actually changed
-      this.emitLists();
-    },
-
-    async fetchList() {
-      await this.$store.dispatch('checkAuth');
-      // New-style call: request the full list object for this page/date.
-      getList({ parent_page: this.parentPage || 'dashboard', date: this.initialDate })
-        .then((response) => {
-          if (response?.message === 'No list items to return') {
-            return;
-          }
-
-          // BACKEND NOTE:
-          //   For the new list object format, `response.data` should be an
-          //   object with a `lists` array matching what `createList` saves:
-          //   {
-          //     parent_page: 'dashboard',
-          //     date: 'YYYY-MM-DD',
-          //     lists: [ { title, visible, color, items: [...] }, ... ]
-          //   }
-          const data = response && response.data;
-
-          if (data && Array.isArray(data.lists)) {
-            // Use the full list object returned from the backend.
-            this.lists = data.lists.map((list, index) => ({
-              title: list.title || `List ${index + 1}`,
-              items: Array.isArray(list.items) ? list.items : [],
-              visible: list.visible !== false,
-              color: list.color || '#2196f3',
-            }));
-
-            // Ensure exactly one list is marked visible.
-            let visibleIndex = this.lists.findIndex((l) => l.visible);
-            if (visibleIndex === -1 && this.lists.length > 0) {
-              visibleIndex = 0;
-              this.lists[0].visible = true;
-            }
-            this.currentListIndex = visibleIndex >= 0 ? visibleIndex : 0;
-            this.selectedItemIndex = 0;
-            return;
-          }
-
-          // Legacy fallback: old API returns a flat array of items in
-          // `response.data[0]`. Keep this path to avoid breaking the
-          // existing backend until it is migrated.
-          if (response?.data && Array.isArray(response.data[0])) {
-            this.currentItems.length = 1;
-            this.selectedItemIndex = 0;
-            this.currentItems.push(this.createNewItem(''));
-            this.currentItems.splice(0, 1);
-
-            for (const item of response.data[0]) {
-              this.loadItemFromGet(item);
-            }
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to get list:', error);
-        });
-    },
-    loadItemFromGet(item) {
-      let newItem = {
-        textString: item.textString,
-        scheduledCheckbox: item.scheduledCheckbox ? true : false,
-        scheduledDate: normalizeDate(item.scheduledDate),
-        scheduledTime: item.scheduledTime,
-        taskTimeEstimate: item.taskTimeEstimate,
-        recurringTask: item.recurringTask,
-        recurringTaskEndDate: item.recurringTaskEndDate,
-        dueDateCheckbox: item.dueDateCheckbox,
-        dueDate: item.dueDate,
-        complete: item.complete,
-      };
-      this.currentItems.push(newItem);
+      // Dashboard owns persistence. Just emit updates.
+      debouncedEmitLists(() => this.emitLists());
     },
     loadInitialData() {
       if (!this.currentItems || this.currentItems.length === 0) {
         this.currentItems.push(this.createNewItem(''));
       }
-      this.fetchList();
+      this.emitLists();
     },
     createTestItem(text) {
       return {
@@ -677,6 +585,10 @@ export default {
     createNewItem(text, prevItem = null) {
       let estimatedMinutes = 30;
       let startTime;
+
+      const listColor =
+        (this.lists[this.currentListIndex] && this.lists[this.currentListIndex].color) ||
+        '#2196f3';
 
       if (prevItem) {
         const prevEstimate = Number(prevItem.taskTimeEstimate) || 30;
@@ -706,6 +618,7 @@ export default {
         scheduledStartTime: startTime,
         scheduledEndTime: endTime,
         taskTimeEstimate: estimatedMinutes,
+        color: listColor,
         recurringTask: false,
         recurringFrequency: null,
         recurringTaskEndDate: null,
@@ -716,6 +629,10 @@ export default {
     },
     createItemWithExistingValues(text) {
       const base = this.currentItems[this.selectedItemIndex] || {};
+
+      const listColor =
+        (this.lists[this.currentListIndex] && this.lists[this.currentListIndex].color) ||
+        '#2196f3';
 
       const baseEstimate = Number(base.taskTimeEstimate) || 30;
       const baseStart = base.scheduledTime || base.scheduledStartTime || this.getNearestTime();
@@ -730,6 +647,7 @@ export default {
         scheduledStartTime: baseStart,
         scheduledEndTime: baseEnd,
         taskTimeEstimate: baseEstimate,
+        color: listColor,
         recurringTask: !!base.recurringTask,
         recurringFrequency: base.recurringFrequency || null,
         recurringTaskEndDate: base.recurringTaskEndDate || null,

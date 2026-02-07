@@ -351,8 +351,23 @@ export default {
     handleUpdateListColor(newColor) {
       if (this.activeListIndex === null || this.activeListIndex === undefined) return;
       const updatedLists = JSON.parse(JSON.stringify(this.lists));
-      if (!updatedLists[this.activeListIndex]) return;
-      updatedLists[this.activeListIndex].color = newColor;
+      const targetList = updatedLists[this.activeListIndex];
+      if (!targetList) return;
+      const previousColor = targetList.color;
+
+      targetList.color = newColor;
+
+      if (Array.isArray(targetList.items)) {
+        targetList.items = targetList.items.map((item) => {
+          if (!item || typeof item !== 'object') return item;
+
+          if (!item.color || item.color === previousColor) {
+            return { ...item, color: newColor };
+          }
+
+          return item;
+        });
+      }
       this.$emit('update:lists', updatedLists);
     },
     
