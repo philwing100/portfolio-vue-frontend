@@ -156,20 +156,62 @@ export default {
     getStorageKey(date) {
       return `${DASHBOARD_LIST_STORAGE_PREFIX}${date}`;
     },
+    getStoredList(date) {
+      try {
+        const raw = localStorage.getItem(this.getStorageKey(date));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.lists)) return null;
+        return parsed;
+      } catch (error) {
+        console.warn('Failed to read stored dashboard list:', error);
+        return null;
+      }
+    },
+    extractTimestamp(listObject) {
+      if (!listObject) return null;
+      return listObject.timestamp || listObject.updated_at || null;
+    },
+    areListsEqual(a, b) {
+      if (!Array.isArray(a) || !Array.isArray(b)) return false;
+      return JSON.stringify(a) === JSON.stringify(b);
+    },
+    buildListObject(date, lists, timestamp) {
+      return {
+        parent_page: 'dashboard',
+        date,
+        lists,
+        timestamp: timestamp || new Date().toISOString(),
+      };
+    },
     async persistDateState(date) {
       try {
-        const listObject = {
-          parent_page: 'dashboard',
-          date,
-          lists: Array.isArray(this.dailyLists)
-            ? JSON.parse(JSON.stringify(this.dailyLists))
-            : [],
-        };
+        const normalized = this.normalizeLists(
+          Array.isArray(this.dailyLists) ? this.dailyLists : []
+        );
+        const stored = this.getStoredList(date);
+        const storedLists = stored && Array.isArray(stored.lists)
+          ? this.normalizeLists(stored.lists)
+          : null;
+
+        if (storedLists && this.areListsEqual(normalized, storedLists) && this.extractTimestamp(stored)) {
+          return;
+        }
+
+        const listObject = this.buildListObject(date, normalized);
 
         localStorage.setItem(this.getStorageKey(date), JSON.stringify(listObject));
+        console.info('[dashboard] saved lists to localStorage', {
+          date,
+          timestamp: listObject.timestamp,
+        });
 
         await this.$store.dispatch('checkAuth');
         await createList(listObject);
+        console.info('[dashboard] saved lists to backend', {
+          date,
+          timestamp: listObject.timestamp,
+        });
       } catch (error) {
         console.warn('Failed to persist dashboard state:', error);
       }
@@ -179,12 +221,15 @@ export default {
     },
     hydrateFromLocalStorage(date) {
       try {
-        const raw = localStorage.getItem(this.getStorageKey(date));
-        if (!raw) return false;
+        const parsed = this.getStoredList(date);
+        if (!parsed) return false;
 
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.lists)) {
+        if (Array.isArray(parsed.lists)) {
           this.dailyLists = JSON.parse(JSON.stringify(parsed.lists));
+          console.info('[dashboard] loaded lists from localStorage', {
+            date,
+            timestamp: this.extractTimestamp(parsed),
+          });
           return true;
         }
       } catch (error) {
@@ -209,11 +254,38 @@ export default {
 
         if (data && Array.isArray(data.lists)) {
           const normalized = this.normalizeLists(data.lists);
+          const stored = this.getStoredList(date);
+          const storedLists = stored && Array.isArray(stored.lists)
+            ? this.normalizeLists(stored.lists)
+            : null;
+
+          if (storedLists && this.areListsEqual(normalized, storedLists)) {
+            if (!this.extractTimestamp(stored)) {
+              const listObject = this.buildListObject(
+                date,
+                storedLists,
+                this.extractTimestamp(data)
+              );
+              localStorage.setItem(this.getStorageKey(date), JSON.stringify(listObject));
+              console.info('[dashboard] saved lists to localStorage (timestamp backfill)', {
+                date,
+                timestamp: listObject.timestamp,
+              });
+            }
+            return;
+          }
+
           this.dailyLists = normalized;
-          localStorage.setItem(
-            this.getStorageKey(date),
-            JSON.stringify({ parent_page: 'dashboard', date, lists: normalized })
+          const listObject = this.buildListObject(
+            date,
+            normalized,
+            this.extractTimestamp(data)
           );
+          localStorage.setItem(this.getStorageKey(date), JSON.stringify(listObject));
+          console.info('[dashboard] loaded lists from backend', {
+            date,
+            timestamp: listObject.timestamp,
+          });
         }
       } catch (error) {
         console.warn('Failed to refresh dashboard lists:', error);

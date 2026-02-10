@@ -48,7 +48,10 @@ const store = createStore({
 
     async handleGoogleLogin({ commit }) {
       const urlParams = new URLSearchParams(window.location.search);  // Capture URL parameters
-      const token = urlParams.get('token');  // Get the JWT token from the URL
+      const token =
+        urlParams.get('token') ||
+        urlParams.get('access_token') ||
+        urlParams.get('accessToken');  // Get the JWT token from the URL
 
       console.log(token);
 
@@ -57,6 +60,21 @@ const store = createStore({
         window.location.href = window.location.origin;
       } else {
         console.warn('Token not found in the URL after Google login');
+      }
+    },
+
+    async refreshToken({ commit }) {
+      try {
+        const response = await axios.post('/auth/refresh', {}, { skipAuthRefresh: true });
+        const newToken = response?.data?.token || response?.data?.accessToken;
+        if (newToken) {
+          commit('SET_TOKEN', newToken);
+          return newToken;
+        }
+        return null;
+      } catch (error) {
+        console.warn('Refresh token error:', error);
+        return null;
       }
     },
 
