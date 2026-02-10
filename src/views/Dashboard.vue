@@ -194,6 +194,16 @@ export default {
           ? this.normalizeLists(stored.lists)
           : null;
 
+        // If we have never stored anything for this date on this device
+        // and the current normalized lists are empty, treat this as
+        // "no data yet" and avoid persisting an empty payload.
+        // This prevents a brand-new device (or tab) from overwriting
+        // an existing non-empty list in the backend with an empty one
+        // before the backend data has finished loading.
+        if ((!storedLists || storedLists.length === 0) && normalized.length === 0) {
+          return;
+        }
+
         if (storedLists && this.areListsEqual(normalized, storedLists) && this.extractTimestamp(stored)) {
           return;
         }

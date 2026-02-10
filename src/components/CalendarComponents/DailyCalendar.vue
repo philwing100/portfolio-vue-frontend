@@ -47,6 +47,13 @@
         </div>
       </div>
 
+      <!-- Current time indicator line -->
+      <div
+        v-if="isToday && currentTimeMinutes !== null"
+        class="current-time-line"
+        :style="currentTimeLineStyle"
+      />
+
       <!-- EventCard integration -->
       <EventCard
         v-if="showEventCard"
@@ -110,6 +117,9 @@ export default {
         onDragging: null,
         endDrag: null,
       },
+      currentTimeMinutes: null,
+      currentTimeIntervalId: null,
+      invertedSecondaryColor: null,
     };
   },
   computed: {
@@ -154,6 +164,20 @@ export default {
     activeList() {
       if (this.activeListIndex === null || this.activeListIndex === undefined) return null;
       return this.lists[this.activeListIndex] || null;
+    },
+    isToday() {
+      return this.date === getTodayDate();
+    },
+    currentTimeTop() {
+      if (this.currentTimeMinutes === null) return '0rem';
+      const topRem = (this.currentTimeMinutes / 60) * 3.75;
+      return `${topRem}rem`;
+    },
+    currentTimeLineStyle() {
+      return {
+        top: this.currentTimeTop,
+        backgroundColor: this.invertedSecondaryColor || 'var(--accentColor)',
+      };
     },
   },
   watch: {
@@ -637,6 +661,24 @@ export default {
       const scrollPosition = defaultScrollTime * 3.75 * 16;
       this.$refs.calendarContainer.scrollTop = scrollPosition;
     },
+    getCurrentMinutesOfDay() {
+      const now = new Date();
+      return now.getHours() * 60 + now.getMinutes();
+    },
+    updateCurrentTime() {
+      this.currentTimeMinutes = this.getCurrentMinutesOfDay();
+    },
+    getInvertedColor(color) {
+      if (!color) return null;
+      const hexMatch = color.trim().match(/^#?([0-9a-fA-F]{6})$/);
+      if (!hexMatch) return null;
+      const hex = hexMatch[1];
+      const r = 255 - parseInt(hex.slice(0, 2), 16);
+      const g = 255 - parseInt(hex.slice(2, 4), 16);
+      const b = 255 - parseInt(hex.slice(4, 6), 16);
+      const toHex = (v) => v.toString(16).padStart(2, '0');
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    },
     normalizeList(list = []) {
       return list.map((item) => {
         const normalized = { ...item };
@@ -672,6 +714,23 @@ export default {
     }
     
     this.scrollToDefaultTime();
+
+    // Initialize and start current time updates
+    this.updateCurrentTime();
+    this.currentTimeIntervalId = setInterval(this.updateCurrentTime, 60000);
+
+    // Compute inverted secondary color from CSS variable
+    if (typeof window !== 'undefined' && window.getComputedStyle) {
+      const styles = window.getComputedStyle(document.documentElement);
+      const secondary = styles.getPropertyValue('--secondaryColor');
+      this.invertedSecondaryColor = this.getInvertedColor(secondary) || null;
+    }
+  },
+  beforeDestroy() {
+    if (this.currentTimeIntervalId) {
+      clearInterval(this.currentTimeIntervalId);
+      this.currentTimeIntervalId = null;
+    }
   },
 };
 </script>
@@ -714,6 +773,16 @@ export default {
 .events {
   position: absolute;
   width: 100%;
+}
+
+.current-time-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 0.125rem;
+  background-color: var(--secondaryColor);
+  z-index: 999;
+  pointer-events: none;
 }
 
 .event {
