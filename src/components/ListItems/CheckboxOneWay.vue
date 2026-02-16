@@ -23,24 +23,19 @@ export default {
   },
   data() {
     return {
-      isChecked: this.checked,
       isHovering: false,
     };
-  },
-  watch: {
-    checked(newVal) {
-      this.isChecked = newVal;
-    },
   },
   computed: {
     buttonLabel() {
       // Show a checkmark when checked or while hovering
-      return (this.isChecked || this.isHovering) ? '✓' : '';
+      return (this.checked || this.isHovering) ? '✓' : '';
     }
   },
   methods: {
-    emitButtonChange() {
-      this.$emit('checkbox-toggled', this.isChecked); // Emit the checked state to the parent
+    emitButtonChange(newValue) {
+      // Emit the desired checked state to the parent
+      this.$emit('checkbox-toggled', newValue);
     },
     hoverButton() {
       // Temporarily show the checkmark on hover
@@ -52,9 +47,9 @@ export default {
     },
     toggleCheck() {
       // Permanently check or uncheck the button on click
-      this.isChecked = !this.isChecked;
+      const newValue = !this.checked;
       this.isHovering = false;
-      this.emitButtonChange();
+      this.emitButtonChange(newValue);
     }
   }
 };

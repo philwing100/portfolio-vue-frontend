@@ -182,6 +182,7 @@ export default {
       editingTemp: null,
       isInternalUpdate: false,
       editingListIndex: null,
+      pomodoroChannel: null,
     };
   },
   watch: {
@@ -239,11 +240,6 @@ export default {
         this.updateListVisibility(newIndex, oldIndex);
       }
     },
-    initialDate(newDate, oldDate) {
-      if (this.listName != 'Backburner' && newDate && newDate !== oldDate) {
-        this.resetForDateChange();
-      }
-    },
     'editingTemp.scheduledStartTime'() {
       this.syncEditingItemFromEditor();
     },
@@ -272,12 +268,19 @@ export default {
   },
   mounted() {
     this.loadInitialData();
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      this.pomodoroChannel = new BroadcastChannel('pomodoro_channel');
+    }
   },
   unmounted() {
     if (this.editingIndex !== null) {
       this.saveEditor(this.editingIndex);
     }
     this.emitLists();
+    if (this.pomodoroChannel) {
+      this.pomodoroChannel.close();
+      this.pomodoroChannel = null;
+    }
   },
   components: {
     DateInput,
@@ -675,6 +678,19 @@ export default {
       this.draggedIndex = null;
       this.saveList();
     },
+    broadcastSelectedTask(item) {
+      if (!this.pomodoroChannel) return;
+      if (this.listName && this.listName !== 'Daily List') return;
+
+      const text = (item && item.textString ? item.textString : '').trim();
+      this.pomodoroChannel.postMessage({
+        type: 'current_task',
+        payload: {
+          text,
+          listTitle: this.currentList && this.currentList.title ? this.currentList.title : '',
+        },
+      });
+    },
     focusEditable(index, position = null) {
       if (this.editingIndex !== null && this.editingIndex !== index) {
         this.saveEditor(this.editingIndex);
@@ -692,6 +708,7 @@ export default {
       const item = this.incompleteItems[index] || this.currentItems[index];
       if (item) {
         this.openEditor(index, item);
+        this.broadcastSelectedTask(item);
       }
       this.saveList();
     },

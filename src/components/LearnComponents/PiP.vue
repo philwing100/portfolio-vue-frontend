@@ -1,6 +1,9 @@
 <template>
   <div class="pip-card">
     <div class="mode">{{ modeLabel }}</div>
+    <div v-if="currentTaskText" class="task" :title="currentTaskText">
+      {{ currentTaskText }}
+    </div>
     <div class="clock">{{ displayTime }}</div>
     <div class="controls">
       <button id="start" @click="toggleStart">{{ isRunning ? 'Pause' : 'Start' }}</button>
@@ -24,6 +27,7 @@ export default {
       now: Date.now(),
       bc: null,
       interval: null,
+      currentTaskText: '',
     };
   },
   computed: {
@@ -76,6 +80,8 @@ export default {
       if (msg.type === 'state' && msg.payload) {
         Object.assign(this, msg.payload);
         try { localStorage.setItem('pomodoro_state', JSON.stringify(msg.payload)); } catch (e) {}
+      } else if (msg.type === 'current_task' && msg.payload) {
+        this.currentTaskText = (msg.payload.text || '').trim();
       } else if (msg.type === 'close') {
         window.close();
       }
@@ -137,21 +143,35 @@ export default {
 
 <style scoped>
 .pip-card {
-  padding: 8px;           /* slightly smaller */
+  padding: 8px;
   border-radius: 6px;
-  width: 280px;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
   background: #111827;
   color: white;
   text-align: center;
   font-family: sans-serif;
   box-sizing: border-box;
-  /* keep a compact height to fit the new smaller PiP window */
-  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 .mode {
   font-size: 0.85rem;
   opacity: 0.95;
   margin-bottom: 6px;
+}
+.task {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  margin-bottom: 4px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .clock {
   font-size: 1.6rem;      /* slightly smaller */

@@ -87,12 +87,21 @@ export default {
       activeMobileView: 'list', // 'list' or 'calendar' when on mobile
       touchStartX: 0,
       touchStartY: 0,
+      backendSaveTimers: {},
     };
   },
   computed: {
     ...mapState(['isAuthenticated', 'user']),
   },
   watch: {
+    dailyLists: {
+      deep: true,
+      handler() {
+        if (this.currentDate) {
+          this.persistDateState(this.currentDate);
+        }
+      },
+    },
     async currentDate(newDate, oldDate) {
       if (oldDate && newDate !== oldDate) {
         await this.persistDateState(oldDate);
@@ -184,6 +193,48 @@ export default {
         timestamp: timestamp || new Date().toISOString(),
       };
     },
+    scheduleBackendSave(listObject) {
+      // If the user is not authenticated, we still persist to
+      // localStorage but we skip any backend calls. This ensures
+      // offline/unauthenticated usage works purely from cache.
+      if (!this.isAuthenticated) {
+        return;
+      }
+
+      try {
+        if (!listObject || !listObject.date) return;
+
+        const dateKey = listObject.date;
+
+        if (!this.backendSaveTimers) {
+          this.backendSaveTimers = {};
+        }
+
+        const existingTimer = this.backendSaveTimers[dateKey];
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        this.backendSaveTimers[dateKey] = setTimeout(async () => {
+          try {
+            await this.$store.dispatch('checkAuth');
+            await createList(listObject);
+            console.info('[dashboard] saved lists to backend (debounced)', {
+              date: listObject.date,
+              timestamp: listObject.timestamp,
+            });
+          } catch (error) {
+            console.warn('Failed to persist dashboard state to backend:', error);
+          } finally {
+            if (this.backendSaveTimers && this.backendSaveTimers[dateKey]) {
+              delete this.backendSaveTimers[dateKey];
+            }
+          }
+        }, 1500);
+      } catch (error) {
+        console.warn('Failed to schedule backend save:', error);
+      }
+    },
     async persistDateState(date) {
       try {
         const normalized = this.normalizeLists(
@@ -216,12 +267,7 @@ export default {
           timestamp: listObject.timestamp,
         });
 
-        await this.$store.dispatch('checkAuth');
-        await createList(listObject);
-        console.info('[dashboard] saved lists to backend', {
-          date,
-          timestamp: listObject.timestamp,
-        });
+        this.scheduleBackendSave(listObject);
       } catch (error) {
         console.warn('Failed to persist dashboard state:', error);
       }
@@ -257,6 +303,12 @@ export default {
       }));
     },
     async refreshFromBackend(date) {
+      // When the user is not authenticated, we rely solely on
+      // localStorage and skip backend calls.
+      if (!this.isAuthenticated) {
+        return;
+      }
+
       try {
         await this.$store.dispatch('checkAuth');
         const response = await getList({ parent_page: 'dashboard', date });
@@ -313,6 +365,12 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.updateIsMobile);
+    if (this.backendSaveTimers) {
+      Object.values(this.backendSaveTimers).forEach((timerId) => {
+        clearTimeout(timerId);
+      });
+      this.backendSaveTimers = {};
+    }
   }
 };
 </script>
