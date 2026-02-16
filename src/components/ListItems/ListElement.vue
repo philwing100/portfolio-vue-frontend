@@ -213,14 +213,16 @@ export default {
             }];
           }
         } else if (!newValue || newValue.length === 0) {
-          if (this.lists.length === 0) {
-            this.lists = [{
-              title: this.listName || 'List 1',
-              items: [this.createNewItem('')],
-              visible: true,
-              color: '#2196f3',
-            }];
-          }
+          // When the parent clears the model (e.g. on date change
+          // before loading a new day's data), reset this component's
+          // internal lists so the UI also clears instead of showing
+          // the previous day's items.
+          this.lists = [{
+            title: this.listName || 'List 1',
+            items: [this.createNewItem('')],
+            visible: true,
+            color: '#2196f3',
+          }];
         }
 
         // If an item is currently being edited, refresh the editingTemp
