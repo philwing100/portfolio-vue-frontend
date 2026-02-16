@@ -26,23 +26,11 @@ function setToken(token) {
   }
 }
 
+// The refresh-token endpoint is currently unreliable. We keep this
+// function defined for backwards compatibility, but make it a
+// no-op that never calls the backend.
 async function refreshToken() {
-  if (!refreshPromise) {
-    refreshPromise = instance
-      .post('/auth/refresh', {}, { skipAuthRefresh: true })
-      .then((response) => {
-        const newToken = response?.data?.token || response?.data?.accessToken;
-        if (newToken) {
-          setToken(newToken);
-        }
-        return newToken;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
-  }
-
-  return refreshPromise;
+  return null;
 }
 
 instance.interceptors.request.use((config) => {
@@ -57,29 +45,9 @@ instance.interceptors.request.use((config) => {
 instance.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const { response, config } = error || {};
-    const status = response?.status;
-
-    if (
-      config &&
-      !config._retry &&
-      !config.skipAuthRefresh &&
-      (status === 401 || status === 403)
-    ) {
-      config._retry = true;
-
-      try {
-        const newToken = await refreshToken();
-        if (newToken) {
-          config.headers = config.headers || {};
-          config.headers.authorization = `${newToken}`;
-        }
-        return instance(config);
-      } catch (refreshError) {
-        return Promise.reject(refreshError);
-      }
-    }
-
+    // Do not attempt to auto-refresh tokens. If a request is
+    // unauthorized, let the caller handle it (e.g. by logging
+    // out or showing a message).
     return Promise.reject(error);
   }
 );
