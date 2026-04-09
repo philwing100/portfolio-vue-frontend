@@ -163,6 +163,21 @@ export async function getStreaks() {
   }
 }
 
+// ── Study API stubs (backend not yet implemented) ─────────────────────────
+// Replace the null returns with real axios calls once the backend is ready.
+
+export async function getStudyData() {
+  // TODO: return axios.post('/study/', { action: 'getStudyData' }).then(r => r.data)
+  return null;
+}
+
+export async function saveStudyData(/* data */) {
+  // TODO: return axios.post('/study/', { action: 'saveStudyData', data: JSON.stringify(data) })
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+
 export async function updateStreak() {
   validateToken();
 

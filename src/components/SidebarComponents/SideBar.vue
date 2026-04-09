@@ -39,10 +39,11 @@ export default {
     const isAuthenticated = computed(() => store.state.isAuthenticated);
 
     const baseRoutes = [
-      { path: '/', label: 'Dashboard' },
-      { path: '/Streaks', label: 'Streaks' },
+      { path: '/',        label: 'Dashboard' },
+      { path: '/Streaks', label: 'Streaks'   },
+      { path: '/study',   label: 'Study'     },
       { path: '/About-me', label: 'About Me' },
-      { path: '/Stats', label: 'Stats' },
+      { path: '/Stats',   label: 'Stats'     },
       { path: '/Settings', label: 'Settings' },
     ];
 

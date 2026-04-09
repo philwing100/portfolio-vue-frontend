@@ -4,8 +4,9 @@ import store from '@/store'; // Vuex store for authentication state
 
 // Import route groups
 import dashboardRoutes from './dashboardRoutes';
-import accountRoutes from './accountRoutes';
-import generalRoutes from './generalRoutes';
+import accountRoutes   from './accountRoutes';
+import generalRoutes   from './generalRoutes';
+import studyRoutes     from './studyRoutes';
 
 // Import the NotFound component
 import NotFound from '@/views/NotFound.vue';
@@ -15,6 +16,7 @@ const routes = [
   ...dashboardRoutes,
   ...accountRoutes,
   ...generalRoutes,
+  ...studyRoutes,
   // Catch-all route for 404 page
   {
     path: '/:pathMatch(.*)*',
