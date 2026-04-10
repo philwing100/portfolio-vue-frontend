@@ -13,8 +13,10 @@ const session = {
   title: 'Study Session',
 
   /**
-   * Callback set by Study.vue.
-   * @type {((cardId: number, setId: number, updatedAnki: object) => void) | null}
+   * Async callback set by Study.vue.
+   * Receives (cardId, setId, rating) where rating is 0=Again/1=Hard/2=Good/3=Easy.
+   * Posts review to the backend (if authenticated) or applies local SM-2 as fallback.
+   * @type {((cardId: string|number, setId: string|number, rating: 0|1|2|3) => Promise<void>) | null}
    */
   onRate: null,
 };

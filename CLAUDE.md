@@ -2,6 +2,9 @@
 
 A Vue 3 productivity + portfolio web app combining task management, habit tracking, statistics, and a personal portfolio showcase.
 
+Backend code located at
+https://github.com/philwing100/portfolio-backend
+
 ---
 
 ## Tech Stack
@@ -100,6 +103,21 @@ Token is persisted in `localStorage('token')` and injected by axios interceptor 
 List payload shape: `{ parent_page, date, lists: [{ title, visible, color, items: [...] }] }`
 
 Item fields: `textString, scheduledDate, scheduledTime, scheduledStartTime, scheduledEndTime, taskTimeEstimate, recurringTask, recurringFrequency, dueDateCheckbox, dueDate, complete`
+
+**`src/api/flashcards.js`** — Flashcard REST client (proper REST, not action-based):
+- `flashcardApi.getSets()` — GET `/flashcards/sets`
+- `flashcardApi.getSet(id)` — GET `/flashcards/sets/:id` (includes all cards + SM-2 state)
+- `flashcardApi.createSet(set)` / `updateSet(id, set)` / `deleteSet(id)`
+- `flashcardApi.addCards(setId, cards)` / `updateCard(id, card)` / `deleteCard(id)`
+- `flashcardApi.reviewCard(cardId, rating)` — POST `/flashcards/cards/:id/review`
+- `normalizeSet(backendSet)` / `normalizeCard(c, setId)` / `normalizeAnkiResponse(d)` — shape adapters
+- Folders have no backend support; `folderId` + `options` are stored as JSON in the set's `description` field
+- Rating map: frontend 0-3 → backend grades `[1,3,4,5]` (Again=1/fail, Hard=3, Good=4, Easy=5)
+
+**Missing backend routes** (needed for full feature parity):
+- `GET /flashcards/sets` should include `due_count` per set (avoid N+1 card fetches for counts)
+- `GET /flashcards/study` should include `set_id` per card (needed to route review updates)
+- Folder CRUD endpoints (`/flashcards/folders`) — currently handled client-side via localStorage
 
 ---
 
@@ -239,14 +257,17 @@ Home page for the ANKI-style flashcard system. Shows folders and sets in a respo
 - `SetModal.vue` — Create/edit set; three tabs: **Cards** (front/back pairs), **Options** (newPerDay, order, folder), **Import/Export** (bulk text with custom delimiters)
 
 **Data flow:**
-- Persists to `localStorage('study-data')` as `{ folders, sets }`
-- On mount calls `checkAuth`; if authenticated, falls back to localStorage until backend is ready
-- Default demo data (Spanish vocab, Data Structures) shown when localStorage is empty
+- On mount: shows `localStorage('study-data')` immediately, then fetches from backend if authenticated (GET all sets, then GET each set in parallel for full card + SM-2 data)
+- Unauthenticated or backend error: falls back to localStorage. Default demo data shown when localStorage is empty.
+- Folders have no backend; stored in localStorage only. `folderId` is serialized into each set's backend `description` field as JSON.
 - "ANKI All" button counts all due cards across the visible scope; launches a session with only due cards (`buildSession(sets, 'due')`)
 - Clicking a set starts a full study session — due + new cards up to `newPerDay` (`buildSession([set], 'study')`)
-- Before navigating to `/study/session`, populates `src/studySession.js` singleton with `cards` array and an `onRate` callback that writes updated ANKI state back to the sets and re-persists
+- Before navigating, populates `studySession.js` singleton with `cards` and an async `onRate(cardId, setId, rating)` callback
+- `onRate` (authenticated): calls `flashcardApi.reviewCard` → gets back updated SM-2 state → applies to local card
+- `onRate` (unauthenticated): applies local SM-2 via `reviewCard()` from `anki.js`
+- Set CRUD: create → POST set + batch POST cards; update → PUT set + diff cards (delete removed, PUT existing, POST new); delete → DELETE set (backend cascades to cards)
 
-**ANKI algorithm:** `src/anki.js` — SM-2 (easeFactor, interval, repetitions, nextReview). Ratings: 0=Again, 1=Hard, 2=Good, 3=Easy.
+**ANKI algorithm:** `src/anki.js` — SM-2 (easeFactor, interval, repetitions, nextReview). Ratings: 0=Again, 1=Hard, 2=Good, 3=Easy. Backend SM-2 is authoritative when authenticated (frontend grades map to backend 0-5 scale via `[1,3,4,5]`).
 
 ---
 

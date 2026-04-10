@@ -63,7 +63,7 @@
 <script>
 import FlashcardDisplay from '@/components/FlashcardComponents/FlashcardDisplay.vue';
 import session          from '@/studySession.js';
-import { reviewCard, RATINGS } from '@/anki';
+import { RATINGS } from '@/anki';
 
 export default {
   name: 'StudySession',
@@ -95,14 +95,14 @@ export default {
   },
 
   methods: {
-    rate(rating) {
+    async rate(rating) {
       const card = this.currentCard;
       if (!card) return;
 
-      const updatedAnki = reviewCard(card.anki, rating);
       this.results.push({ card, rating });
 
-      if (session.onRate) session.onRate(card.id, card.setId, updatedAnki);
+      // onRate handles SM-2 update (remote if authenticated, local otherwise)
+      if (session.onRate) await session.onRate(card.id, card.setId, rating);
 
       this.advance();
     },

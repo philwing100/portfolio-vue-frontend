@@ -11,13 +11,16 @@
 
       <button
         class="anki-all-btn"
-        :disabled="totalDue === 0"
+        :disabled="totalDue === 0 || loading"
         @click="startAnkiAll"
       >
         ANKI All
         <span v-if="totalDue > 0" class="anki-badge">{{ totalDue }}</span>
       </button>
     </div>
+
+    <!-- Loading indicator -->
+    <div v-if="loading" class="loading-bar" />
 
     <!-- Content grid ────────────────────────────────── -->
     <div class="content-grid">
@@ -78,19 +81,19 @@
 </template>
 
 <script>
-import FolderCard   from '@/components/FlashcardComponents/FolderCard.vue';
-import SetCard      from '@/components/FlashcardComponents/SetCard.vue';
-import FolderModal  from '@/components/FlashcardComponents/FolderModal.vue';
-import SetModal     from '@/components/FlashcardComponents/SetModal.vue';
-import session      from '@/studySession.js';
-import { getDueCount, buildSession } from '@/anki';
+import FolderCard  from '@/components/FlashcardComponents/FolderCard.vue';
+import SetCard     from '@/components/FlashcardComponents/SetCard.vue';
+import FolderModal from '@/components/FlashcardComponents/FolderModal.vue';
+import SetModal    from '@/components/FlashcardComponents/SetModal.vue';
+import session     from '@/studySession.js';
+import { getDueCount, buildSession, reviewCard } from '@/anki';
+import { flashcardApi, normalizeSet, normalizeAnkiResponse } from '@/api/flashcards';
 
 const LS_KEY = 'study-data';
 
-// ── Default data shown when not authenticated / no backend data ──────────
 const DEFAULT_FOLDERS = [
-  { id: 1, title: 'Languages',         color: '#4CAF50' },
-  { id: 2, title: 'Computer Science',  color: '#2196F3' },
+  { id: 1, title: 'Languages',        color: '#4CAF50' },
+  { id: 2, title: 'Computer Science', color: '#2196F3' },
 ];
 
 const DEFAULT_SETS = [
@@ -98,8 +101,8 @@ const DEFAULT_SETS = [
     id: 1, title: 'Spanish Vocabulary', folderId: 1,
     options: { newPerDay: 20, orderMode: 'random' },
     cards: [
-      { id: 1, front: 'Hello',   back: 'Hola',     anki: null },
-      { id: 2, front: 'Goodbye', back: 'Adiós',    anki: null },
+      { id: 1, front: 'Hello',     back: 'Hola',    anki: null },
+      { id: 2, front: 'Goodbye',   back: 'Adiós',   anki: null },
       { id: 3, front: 'Thank you', back: 'Gracias', anki: null },
     ],
   },
@@ -107,8 +110,8 @@ const DEFAULT_SETS = [
     id: 2, title: 'Data Structures', folderId: 2,
     options: { newPerDay: 10, orderMode: 'sequential' },
     cards: [
-      { id: 1, front: 'Stack',  back: 'LIFO — last in, first out', anki: null },
-      { id: 2, front: 'Queue',  back: 'FIFO — first in, first out', anki: null },
+      { id: 1, front: 'Stack', back: 'LIFO — last in, first out',  anki: null },
+      { id: 2, front: 'Queue', back: 'FIFO — first in, first out', anki: null },
     ],
   },
 ];
@@ -118,14 +121,14 @@ export default {
   components: { FolderCard, SetCard, FolderModal, SetModal },
 
   props: {
-    // Set by /study/folder/:id route
     folderId: { type: Number, default: null },
   },
 
   data() {
     return {
-      folders: [],
-      sets:    [],
+      folders:         [],
+      sets:            [],
+      loading:         false,
       showFolderModal: false,
       showSetModal:    false,
       selectedFolder:  null,
@@ -134,6 +137,8 @@ export default {
   },
 
   computed: {
+    isAuthenticated() { return this.$store.state.isAuthenticated; },
+
     currentFolder() {
       return this.folderId
         ? this.folders.find(f => f.id === this.folderId) ?? null
@@ -158,19 +163,17 @@ export default {
 
   methods: {
     // ── Data loading ──────────────────────────────────────────────────────
+
     async loadData() {
+      // Show cached data immediately for instant paint
+      this.loadFromLocalStorage();
+
       try {
         await this.$store.dispatch('checkAuth');
-        if (this.$store.state.isAuthenticated) {
-          // TODO: replace with real API calls once backend is ready
-          // const res = await getStudyData();
-          // this.folders = res.folders; this.sets = res.sets;
-          this.loadFromLocalStorage();
-        } else {
-          this.loadFromLocalStorage();
-        }
+        if (!this.isAuthenticated) return;
+        await this.loadFromBackend();
       } catch {
-        this.loadFromLocalStorage();
+        // Remain on cached data
       }
     },
 
@@ -191,18 +194,40 @@ export default {
       }
     },
 
+    async loadFromBackend() {
+      this.loading = true;
+      try {
+        // Fetch all sets (metadata) then load full card data in parallel
+        const overviewRes = await flashcardApi.getSets();
+        const overview    = overviewRes.data ?? [];
+
+        const fullSets = await Promise.all(
+          overview.map(s =>
+            flashcardApi.getSet(s.set_id)
+              .then(r => normalizeSet(r.data))
+              .catch(() => null)
+          )
+        );
+
+        this.sets = fullSets.filter(Boolean);
+        this.persist(); // keep localStorage in sync with backend
+      } finally {
+        this.loading = false;
+      }
+    },
+
     persist() {
       localStorage.setItem(LS_KEY, JSON.stringify({ folders: this.folders, sets: this.sets }));
-      // TODO: await saveStudyData({ folders: this.folders, sets: this.sets });
     },
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
     getDueCount,
     setsInFolder(folderId) { return this.sets.filter(s => s.folderId === folderId); },
-
-    nextId(arr) { return arr.length ? Math.max(...arr.map(x => x.id)) + 1 : 1; },
+    nextId(arr)            { return arr.length ? Math.max(...arr.map(x => x.id)) + 1 : 1; },
 
     // ── Session launchers ─────────────────────────────────────────────────
+
     startAnkiAll() {
       const src = this.folderId ? this.visibleSets : this.sets;
       this.launchSession(src, 'due', 'ANKI All');
@@ -216,20 +241,43 @@ export default {
       const cards = buildSession(sets, mode);
       if (!cards.length) return;
 
-      session.cards  = cards;
-      session.title  = title;
-      session.onRate = (cardId, setId, updatedAnki) => {
-        const targetSet = this.sets.find(s => s.id === setId);
-        if (!targetSet) return;
-        const card = targetSet.cards.find(c => c.id === cardId);
-        if (card) card.anki = updatedAnki;
+      session.cards = cards;
+      session.title = title;
+
+      const isAuth = this.isAuthenticated;
+
+      session.onRate = async (cardId, setId, rating) => {
+        if (isAuth) {
+          try {
+            const res = await flashcardApi.reviewCard(cardId, rating);
+            this._applyAnkiUpdate(cardId, setId, normalizeAnkiResponse(res.data));
+          } catch (err) {
+            console.warn('Review sync failed, applying local SM-2:', err);
+            this._localReview(cardId, setId, rating);
+          }
+        } else {
+          this._localReview(cardId, setId, rating);
+        }
         this.persist();
       };
 
       this.$router.push({ name: 'StudySession' });
     },
 
-    // ── Folder CRUD ───────────────────────────────────────────────────────
+    _applyAnkiUpdate(cardId, setId, updatedAnki) {
+      const set  = this.sets.find(s => s.id === setId);
+      const card = set?.cards.find(c => c.id === cardId);
+      if (card) card.anki = updatedAnki;
+    },
+
+    _localReview(cardId, setId, rating) {
+      const set  = this.sets.find(s => s.id === setId);
+      const card = set?.cards.find(c => c.id === cardId);
+      if (card) card.anki = reviewCard(card.anki, rating);
+    },
+
+    // ── Folder CRUD (client-side only — no backend folder support) ─────────
+
     openFolderModal(folder) {
       this.selectedFolder  = folder;
       this.showFolderModal = true;
@@ -249,34 +297,102 @@ export default {
 
     deleteFolder(folderId) {
       this.folders = this.folders.filter(f => f.id !== folderId);
-      // Un-assign sets that belonged to this folder
       this.sets.forEach(s => { if (s.folderId === folderId) s.folderId = null; });
       this.persist();
       this.showFolderModal = false;
     },
 
     // ── Set CRUD ──────────────────────────────────────────────────────────
+
     openSetModal(set) {
       this.selectedSet  = set ? { ...set, cards: set.cards.map(c => ({ ...c })) } : null;
       this.showSetModal = true;
     },
 
-    saveSet(set) {
+    async saveSet(set) {
+      if (!this.isAuthenticated) {
+        this._saveSetLocal(set);
+        return;
+      }
+      try {
+        if (set.id == null) {
+          await this._createSetRemote(set);
+        } else {
+          await this._updateSetRemote(set);
+        }
+        this.persist();
+        this.showSetModal = false;
+      } catch (err) {
+        console.warn('Backend save failed, saving locally:', err);
+        this._saveSetLocal(set);
+      }
+    },
+
+    async _createSetRemote(set) {
+      if (this.folderId && set.folderId == null) set.folderId = this.folderId;
+      const setRes  = await flashcardApi.createSet(set);
+      const newId   = setRes.data.set_id;
+
+      const validCards = set.cards.filter(c => c.front.trim() || c.back.trim());
+      let savedCards = [];
+      if (validCards.length) {
+        const cardsRes = await flashcardApi.addCards(newId, validCards);
+        savedCards = Array.isArray(cardsRes.data) ? cardsRes.data : [cardsRes.data];
+      }
+
+      this.sets.push({
+        ...set,
+        id:    newId,
+        cards: savedCards.map((c, i) => ({ ...validCards[i], id: c.card_id, anki: null })),
+      });
+    },
+
+    async _updateSetRemote(set) {
+      await flashcardApi.updateSet(set.id, set);
+
+      const oldSet     = this.sets.find(s => s.id === set.id);
+      const oldCardIds = new Set(oldSet?.cards.map(c => c.id) ?? []);
+      const keptIds    = new Set(set.cards.filter(c => c.id > 0).map(c => c.id));
+
+      // Delete removed cards
+      const deletedIds = [...oldCardIds].filter(id => !keptIds.has(id));
+      await Promise.all(deletedIds.map(id => flashcardApi.deleteCard(id)));
+
+      // Update existing cards (backend handles change detection via content hash)
+      const existing = set.cards.filter(c => c.id > 0);
+      await Promise.all(existing.map(c => flashcardApi.updateCard(c.id, c)));
+
+      // Add new cards (negative tmp ids)
+      const newCards    = set.cards.filter(c => c.id < 0);
+      let addedCards    = [];
+      if (newCards.length) {
+        const res  = await flashcardApi.addCards(set.id, newCards);
+        addedCards = Array.isArray(res.data) ? res.data : [res.data];
+      }
+
+      // Rebuild cards array preserving existing SM-2 state
+      const finalCards = [
+        ...existing.map(c => ({ ...c, anki: oldSet?.cards.find(o => o.id === c.id)?.anki ?? c.anki })),
+        ...addedCards.map((c, i) => ({ ...newCards[i], id: c.card_id, anki: null })),
+      ];
+
+      const idx = this.sets.findIndex(s => s.id === set.id);
+      if (idx !== -1) this.sets[idx] = { ...set, cards: finalCards };
+    },
+
+    _saveSetLocal(set) {
       if (set.id == null) {
         set.id = this.nextId(this.sets);
-        // Assign to current folder if we're inside one
         if (this.folderId && set.folderId == null) set.folderId = this.folderId;
-        // Assign proper IDs to new cards
         let nextCardId = 1;
         set.cards.forEach(c => { c.id = nextCardId++; });
         this.sets.push(set);
       } else {
         const idx = this.sets.findIndex(s => s.id === set.id);
         if (idx !== -1) {
-          // Assign IDs to any new cards (negative tmp ids)
           const maxId = set.cards.reduce((m, c) => (c.id > 0 ? Math.max(m, c.id) : m), 0);
-          let nextCardId = maxId + 1;
-          set.cards.forEach(c => { if (c.id < 0) c.id = nextCardId++; });
+          let next = maxId + 1;
+          set.cards.forEach(c => { if (c.id < 0) c.id = next++; });
           this.sets[idx] = set;
         }
       }
@@ -284,7 +400,14 @@ export default {
       this.showSetModal = false;
     },
 
-    deleteSet(setId) {
+    async deleteSet(setId) {
+      if (this.isAuthenticated) {
+        try {
+          await flashcardApi.deleteSet(setId);
+        } catch (err) {
+          console.warn('Backend delete failed:', err);
+        }
+      }
       this.sets = this.sets.filter(s => s.id !== setId);
       this.persist();
       this.showSetModal = false;
@@ -354,6 +477,18 @@ export default {
   padding: 0.1rem 0.45rem;
   border-radius: 0.75rem;
   font-size: 0.75rem;
+}
+
+/* ── Loading bar ── */
+.loading-bar {
+  height: 0.1875rem;
+  background: linear-gradient(90deg, transparent, var(--accentColor), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 
 /* ── Grid ── */
