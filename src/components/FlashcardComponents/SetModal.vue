@@ -111,9 +111,6 @@
 
     <template #footer>
       <button class="modal-btn" @click="$emit('close')">Cancel</button>
-      <button v-if="isEdit" class="modal-btn danger" @click="$emit('delete', local.id)">
-        Delete
-      </button>
       <button class="modal-btn primary" @click="save">Save</button>
     </template>
   </GenericModal>
@@ -158,6 +155,8 @@ function parseDelimiter(str) {
   return str.replace(/\\t/g, '\t').replace(/\\n/g, '\n');
 }
 
+const DELIMITER_LS_KEY = 'flashcard-import-export-delimiters';
+
 export default {
   name: 'SetModal',
   components: { GenericModal, TextField, Tabs, Dropdown, IntInput },
@@ -167,13 +166,22 @@ export default {
     set:     { type: Object,  default: null  },
     folders: { type: Array,   default: () => [] },
   },
-  emits: ['save', 'delete', 'close'],
+  emits: ['save', 'close'],
 
   data() {
+    const saved = (() => {
+      try {
+        const raw = localStorage.getItem(DELIMITER_LS_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    })();
+
     return {
       local: emptySet(),
-      termDelimiter: '\\t',
-      cardDelimiter: '\\n',
+      termDelimiter: saved?.termDelimiter ?? '\\t',
+      cardDelimiter: saved?.cardDelimiter ?? '\\n',
       bulkText: '',
       importError: '',
       TABS,
@@ -203,11 +211,28 @@ export default {
         this.importError = '';
       },
     },
+    termDelimiter(newVal) {
+      this._persistDelimiters();
+    },
+    cardDelimiter(newVal) {
+      this._persistDelimiters();
+    },
   },
 
   methods: {
     addCard()        { this.local.cards.push(newCard()); },
     removeCard(idx)  { this.local.cards.splice(idx, 1); },
+
+    _persistDelimiters() {
+      try {
+        localStorage.setItem(DELIMITER_LS_KEY, JSON.stringify({
+          termDelimiter: this.termDelimiter,
+          cardDelimiter: this.cardDelimiter,
+        }));
+      } catch {
+        // Ignore localStorage errors
+      }
+    },
 
     save() {
       if (!this.local.title.trim()) return;

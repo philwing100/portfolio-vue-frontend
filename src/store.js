@@ -6,7 +6,9 @@ const store = createStore({
   state: {
     user: null,
     isAuthenticated: false,
-    token: localStorage.getItem('token') || null,  // Load token from localStorage
+    token: localStorage.getItem('token') || null,
+    allFolders: [],
+    allSets: [],
   },
   mutations: {
     SET_USER(state, user) {
@@ -22,6 +24,12 @@ const store = createStore({
     SET_TOKEN(state, token) {
       state.token = token;
       localStorage.setItem('token', token);  // Store token in localStorage
+    },
+    SET_FOLDERS(state, folders) {
+      state.allFolders = folders;
+    },
+    SET_SETS(state, sets) {
+      state.allSets = sets;
     },
   },
   actions: {

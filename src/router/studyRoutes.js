@@ -1,5 +1,6 @@
 import Study from '@/views/Study.vue';
 import StudySession from '@/views/StudySession.vue';
+import SetEditor from '@/views/SetEditor.vue';
 
 export default [
   {
@@ -13,6 +14,12 @@ export default [
     name: 'StudyFolder',
     component: Study,
     props: route => ({ folderId: Number(route.params.id) }),
+  },
+  {
+    path: '/study/set/:id',
+    name: 'SetEditor',
+    component: SetEditor,
+    props: route => ({ setId: route.params.id === 'new' ? null : Number(route.params.id) }),
   },
   {
     path: '/study/session',

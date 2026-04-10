@@ -54,7 +54,7 @@ export default {
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.45s ease;
+  transition: transform 0.2s ease;
 }
 .card-inner.flipped {
   transform: rotateY(180deg);

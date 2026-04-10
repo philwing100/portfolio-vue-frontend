@@ -197,7 +197,7 @@ export default {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.05s, color 0.05s;
   min-width: 5rem;
 }
 .rating-btn:hover {

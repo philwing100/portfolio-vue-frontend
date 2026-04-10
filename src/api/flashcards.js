@@ -58,6 +58,11 @@ export function normalizeSet(s) {
   };
 }
 
+/** Normalize a backend folder to the frontend folder shape. */
+export function normalizeFolder(f) {
+  return { id: f.folder_id, title: f.title, color: f.color };
+}
+
 /** Normalize the SM-2 fields returned by POST /cards/:id/review */
 export function normalizeAnkiResponse(d) {
   return {
@@ -84,6 +89,12 @@ function serializeSetMeta(set) {
 // ── API methods ────────────────────────────────────────────────────────────
 
 export const flashcardApi = {
+  // Folders
+  getFolders:    ()           => axios.get('/flashcards/folders').then(r => r.data),
+  createFolder:  (folder)     => axios.post('/flashcards/folders', { title: folder.title, color: folder.color }).then(r => r.data),
+  updateFolder:  (id, folder) => axios.put(`/flashcards/folders/${id}`, { title: folder.title, color: folder.color }).then(r => r.data),
+  deleteFolder:  (id)         => axios.delete(`/flashcards/folders/${id}`).then(r => r.data),
+
   // Sets
   getSets:   ()        => axios.get('/flashcards/sets').then(r => r.data),
   getSet:    (id)      => axios.get(`/flashcards/sets/${id}`).then(r => r.data),

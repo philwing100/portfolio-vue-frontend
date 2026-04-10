@@ -11,14 +11,20 @@
           <label class="field-label">Color</label>
           <input type="color" v-model="local.color" class="color-swatch" />
         </div>
+        <div v-if="parentFolderOptions.length > 0" class="parent-row">
+          <label class="field-label">Parent Folder</label>
+          <Dropdown
+            v-model="local.parentFolderId"
+            :options="parentFolderOptions"
+            labelKey="label"
+            valueKey="value"
+          />
+        </div>
       </div>
     </template>
 
     <template #footer>
       <button class="modal-btn" @click="$emit('close')">Cancel</button>
-      <button v-if="isEdit" class="modal-btn danger" @click="$emit('delete', local.id)">
-        Delete
-      </button>
       <button class="modal-btn primary" @click="save">Save</button>
     </template>
   </GenericModal>
@@ -26,23 +32,47 @@
 
 <script>
 import GenericModal from '@/components/GeneralComponents/GenericModal.vue';
-import TextField    from '@/components/GeneralComponents/TextField.vue';
+import TextField from '@/components/GeneralComponents/TextField.vue';
+import Dropdown from '@/components/GeneralComponents/Dropdown.vue';
 
-const emptyFolder = () => ({ id: null, title: '', color: '#4CAF50' });
+const emptyFolder = () => ({ id: null, title: '', color: '#4CAF50', parentFolderId: null });
 
 export default {
   name: 'FolderModal',
-  components: { GenericModal, TextField },
+  components: { GenericModal, TextField, Dropdown },
   props: {
     isOpen: { type: Boolean, default: false },
-    folder: { type: Object,  default: null  },
+    folder: { type: Object, default: null },
+    allFolders: { type: Array, default: () => [] },
   },
-  emits: ['save', 'delete', 'close'],
+  emits: ['save', 'close'],
   data() {
     return { local: emptyFolder() };
   },
   computed: {
     isEdit() { return this.folder?.id != null; },
+    parentFolderOptions() {
+      const currentId = this.local.id;
+      const childIds = new Set();
+      
+      // Collect all descendants of the current folder to prevent circular references
+      const collectDescendants = (folderId) => {
+        const children = this.allFolders.filter(f => f.parentFolderId === folderId);
+        children.forEach(child => {
+          childIds.add(child.id);
+          collectDescendants(child.id);
+        });
+      };
+      
+      if (currentId) collectDescendants(currentId);
+      
+      return [
+        { label: '(root)', value: null },
+        ...this.allFolders
+          .filter(f => f.id !== currentId && !childIds.has(f.id))
+          .map(f => ({ label: f.title, value: f.id })),
+      ];
+    },
   },
   watch: {
     folder: {
@@ -71,6 +101,11 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+.parent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 .field-label {
   color: var(--accentColor);
