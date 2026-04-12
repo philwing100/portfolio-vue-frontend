@@ -21,6 +21,9 @@
 
 import { instance as axios } from '@/axios';
 
+// Backend wraps all responses as { success, data, ... }. Unwrap to the payload.
+const unwrap = r => (r.data && 'data' in r.data ? r.data.data : r.data);
+
 // Map frontend 4-point rating → backend 6-point SM-2 grade
 // 0=Again→1(fail), 1=Hard→3(pass/hard), 2=Good→4(pass/good), 3=Easy→5(pass/easy)
 const GRADE_MAP = [1, 3, 4, 5];
@@ -95,32 +98,32 @@ function serializeSetMeta(set) {
 
 export const flashcardApi = {
   // Folders
-  getFolders:    ()           => axios.get('/flashcards/folders').then(r => r.data),
-  createFolder:  (folder)     => axios.post('/flashcards/folders', { title: folder.title, color: folder.color }).then(r => r.data),
-  updateFolder:  (id, folder) => axios.put(`/flashcards/folders/${id}`, { title: folder.title, color: folder.color }).then(r => r.data),
-  deleteFolder:  (id)         => axios.delete(`/flashcards/folders/${id}`).then(r => r.data),
+  getFolders:    ()           => axios.get('/flashcards/folders').then(unwrap),
+  createFolder:  (folder)     => axios.post('/flashcards/folders', { title: folder.title, color: folder.color }).then(unwrap),
+  updateFolder:  (id, folder) => axios.put(`/flashcards/folders/${id}`, { title: folder.title, color: folder.color }).then(unwrap),
+  deleteFolder:  (id)         => axios.delete(`/flashcards/folders/${id}`).then(unwrap),
 
   // Sets
-  getSets:   ()        => axios.get('/flashcards/sets').then(r => r.data),
-  getSet:    (id)      => axios.get(`/flashcards/sets/${id}`).then(r => r.data),
-  createSet: (set)     => axios.post('/flashcards/sets', serializeSetMeta(set)).then(r => r.data),
-  updateSet: (id, set) => axios.put(`/flashcards/sets/${id}`, serializeSetMeta(set)).then(r => r.data),
-  deleteSet: (id)      => axios.delete(`/flashcards/sets/${id}`).then(r => r.data),
+  getSets:   ()        => axios.get('/flashcards/sets').then(unwrap),
+  getSet:    (id)      => axios.get(`/flashcards/sets/${id}`).then(unwrap),
+  createSet: (set)     => axios.post('/flashcards/sets', serializeSetMeta(set)).then(unwrap),
+  updateSet: (id, set) => axios.put(`/flashcards/sets/${id}`, serializeSetMeta(set)).then(unwrap),
+  deleteSet: (id)      => axios.delete(`/flashcards/sets/${id}`).then(unwrap),
 
   // Cards — backend accepts a single object or an array
   addCards:   (setId, cards) => axios.post(
     `/flashcards/sets/${setId}/cards`,
     cards.map(c => ({ term: c.front, definition: c.back }))
-  ).then(r => r.data),
+  ).then(unwrap),
   updateCard: (id, card)     => axios.put(
     `/flashcards/cards/${id}`,
     { term: card.front, definition: card.back }
-  ).then(r => r.data),
-  deleteCard: (id)           => axios.delete(`/flashcards/cards/${id}`).then(r => r.data),
+  ).then(unwrap),
+  deleteCard: (id)           => axios.delete(`/flashcards/cards/${id}`).then(unwrap),
 
   // Review — posts grade, returns updated SM-2 state
   reviewCard: (cardId, rating) => axios.post(
     `/flashcards/cards/${cardId}/review`,
     { grade: GRADE_MAP[rating] }
-  ).then(r => r.data),
+  ).then(unwrap),
 };
