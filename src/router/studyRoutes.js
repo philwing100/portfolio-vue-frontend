@@ -13,13 +13,13 @@ export default [
     path: '/study/folder/:id',
     name: 'StudyFolder',
     component: Study,
-    props: route => ({ folderId: Number(route.params.id) }),
+    props: route => ({ folderId: route.params.id }),
   },
   {
     path: '/study/set/:id',
     name: 'SetEditor',
     component: SetEditor,
-    props: route => ({ setId: route.params.id === 'new' ? null : Number(route.params.id) }),
+    props: route => ({ setId: route.params.id === 'new' ? null : route.params.id }),
   },
   {
     path: '/study/session',

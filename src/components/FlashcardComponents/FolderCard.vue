@@ -45,7 +45,6 @@ export default {
   cursor: pointer;
   transition: opacity 0.15s, transform 0.12s;
   user-select: none;
-  overflow: hidden;
 }
 .folder-card:hover  { opacity: 0.85; transform: translateY(-2px); }
 .folder-card:active { transform: translateY(0); opacity: 0.7; }

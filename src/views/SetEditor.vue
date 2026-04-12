@@ -211,7 +211,7 @@ export default {
   components: { TextField, Tabs, Dropdown, IntInput, ConfirmDialog },
 
   props: {
-    setId: { type: Number, default: null },
+    setId: { type: [String, Number], default: null },
   },
 
   data() {
@@ -325,9 +325,8 @@ export default {
 
     // ── Save ──────────────────────────────────────────────────────────────
 
-    async save() {
-      if (!this.local.title.trim() || this.saving) return;
-      this.saving = true;
+    save() {
+      if (!this.local.title.trim()) return;
 
       this._persistDelimiters();
 
@@ -336,16 +335,15 @@ export default {
         cards: this.local.cards.filter(c => c.front.trim() || c.back.trim()),
       };
 
-      try {
-        if (this.isAuth) {
-          await this._syncToBackend(setData);
-        }
-      } catch (err) {
-        console.warn('Backend save failed, saving locally:', err);
+      this._saveLocally(setData);
+      const localId = setData.id;
+
+      if (this.isAuth) {
+        this._syncToBackend(setData)
+          .then(() => this._saveLocally(setData, localId))
+          .catch(err => console.warn('Backend save failed:', err));
       }
 
-      this._saveLocally(setData);
-      this.saving = false;
       this.$router.push('/study');
     },
 
@@ -397,17 +395,19 @@ export default {
       return orig && (orig.front !== card.front || orig.back !== card.back);
     },
 
-    _saveLocally(set) {
+    _saveLocally(set, replaceId = null) {
       try {
         const raw  = localStorage.getItem(LS_KEY);
         const data = raw ? JSON.parse(raw) : { folders: [], sets: [] };
 
-        const idx = data.sets.findIndex(s => s.id === set.id);
+        const lookupId = replaceId ?? set.id;
+        const idx = lookupId != null ? data.sets.findIndex(s => s.id === lookupId) : -1;
         if (idx !== -1) {
           data.sets[idx] = set;
         } else {
           if (set.id == null) {
-            set.id = data.sets.length ? Math.max(...data.sets.map(s => s.id)) + 1 : 1;
+            const numericIds = data.sets.map(s => s.id).filter(id => typeof id === 'number');
+            set.id = numericIds.length ? Math.max(...numericIds) + 1 : 1;
           }
           data.sets.push(set);
         }

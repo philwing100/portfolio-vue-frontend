@@ -38,30 +38,56 @@
       </div>
     </Transition>
 
+    <!-- Folder structure / drop zones ───────────────────── -->
+    <FolderTree
+      :folders="folders"
+      :currentFolderId="folderId"
+      @navigate="navigateToFolder"
+      @reparent="handleReparent"
+    />
+
     <!-- Content grid ────────────────────────────────────── -->
+    <draggable
+      class="content-grid"
+      :list="draggableFolderItems"
+      :group="{ name: 'flashcard-items', pull: 'clone', put: false }"
+      :sort="false"
+      :clone="cloneItem"
+      item-key="id"
+      v-if="visibleFolders.length"
+    >
+      <template #item="{ element }">
+        <FolderCard
+          :folder="element"
+          :setCount="setsInFolder(element.id).length"
+          @click="$router.push(`/study/folder/${element.id}`)"
+          @edit="openFolderModal"
+          @delete="confirmDeleteFolder"
+        />
+      </template>
+    </draggable>
+
+    <draggable
+      class="content-grid"
+      :list="draggableSetItems"
+      :group="{ name: 'flashcard-items', pull: 'clone', put: false }"
+      :sort="false"
+      :clone="cloneItem"
+      item-key="id"
+      v-if="visibleSets.length"
+    >
+      <template #item="{ element }">
+        <SetCard
+          :set="element"
+          :dueCount="getDueCount(element.cards)"
+          @study="startSetStudy(element)"
+          @edit="openSetModal"
+          @delete="confirmDeleteSet"
+        />
+      </template>
+    </draggable>
+
     <div class="content-grid">
-      <!-- Subfolders -->
-      <FolderCard
-        v-for="folder in visibleFolders"
-        :key="folder.id"
-        :folder="folder"
-        :setCount="setsInFolder(folder.id).length"
-        @click="$router.push(`/study/folder/${folder.id}`)"
-        @edit="openFolderModal"
-        @delete="confirmDeleteFolder"
-      />
-
-      <!-- Sets -->
-      <SetCard
-        v-for="set in visibleSets"
-        :key="set.id"
-        :set="set"
-        :dueCount="getDueCount(set.cards)"
-        @study="startSetStudy(set)"
-        @edit="openSetModal"
-        @delete="confirmDeleteSet"
-      />
-
       <!-- Add-tile: New Folder -->
       <div class="add-tile" @click="openFolderModal(null)">
         <span class="add-tile-icon">📁</span>
@@ -98,7 +124,9 @@
 import FolderCard    from '@/components/FlashcardComponents/FolderCard.vue';
 import SetCard       from '@/components/FlashcardComponents/SetCard.vue';
 import FolderModal   from '@/components/FlashcardComponents/FolderModal.vue';
+import FolderTree    from '@/components/FlashcardComponents/FolderTree.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import draggable     from 'vuedraggable';
 import session       from '@/studySession.js';
 import { getDueCount, buildSession, reviewCard } from '@/anki';
 import { flashcardApi, normalizeSet, normalizeFolder, normalizeAnkiResponse } from '@/api/flashcards';
@@ -133,10 +161,10 @@ const DEFAULT_SETS = [
 
 export default {
   name: 'StudyPage',
-  components: { FolderCard, SetCard, FolderModal, ConfirmDialog },
+  components: { FolderCard, SetCard, FolderModal, FolderTree, ConfirmDialog, draggable },
 
   props: {
-    folderId: { type: Number, default: null },
+    folderId: { type: [String, Number], default: null },
   },
 
   data() {
@@ -179,6 +207,13 @@ export default {
     totalDue() {
       const src = this.folderId ? this.visibleSets : this.sets;
       return src.reduce((n, s) => n + getDueCount(s.cards), 0);
+    },
+
+    draggableFolderItems() {
+      return this.visibleFolders.map(f => ({ ...f, __type: 'folder' }));
+    },
+    draggableSetItems() {
+      return this.visibleSets.map(s => ({ ...s, __type: 'set' }));
     },
   },
 
@@ -285,6 +320,44 @@ export default {
       localStorage.setItem(ANKI_INFO_KEY, '1');
     },
 
+    // ── Drag & drop ───────────────────────────────────────────────────────
+
+    cloneItem(item) { return { ...item }; },
+
+    navigateToFolder(id) {
+      this.$router.push(id == null ? '/study' : `/study/folder/${id}`);
+    },
+
+    handleReparent({ type, id, targetFolderId }) {
+      if (type === 'folder') {
+        if (id === targetFolderId) return;
+        if (this._isDescendant(targetFolderId, id)) return;
+        const folder = this.folders.find(f => f.id === id);
+        if (!folder || folder.parentFolderId === targetFolderId) return;
+        folder.parentFolderId = targetFolderId;
+        this.persist();
+        // Backend folders table has no parent_folder_id column — nesting is client-side only.
+      } else if (type === 'set') {
+        const set = this.sets.find(s => s.id === id);
+        if (!set || set.folderId === targetFolderId) return;
+        set.folderId = targetFolderId;
+        this.persist();
+        if (this.isAuthenticated) {
+          flashcardApi.updateSet(set.id, set).catch(err => console.warn('Reparent set sync failed:', err));
+        }
+      }
+    },
+
+    _isDescendant(candidateId, ancestorId) {
+      let cur = candidateId;
+      while (cur != null) {
+        if (cur === ancestorId) return true;
+        const f = this.folders.find(x => x.id === cur);
+        cur = f ? f.parentFolderId : null;
+      }
+      return false;
+    },
+
     // ── Session launchers ─────────────────────────────────────────────────
 
     startAnkiAll() {
@@ -345,29 +418,40 @@ export default {
       this.showFolderModal = true;
     },
 
-    async saveFolder(folder) {
-      if (this.isAuthenticated) {
-        try {
-          if (folder.id == null) {
-            const res = await flashcardApi.createFolder(folder);
-            folder.id = res?.folder_id ?? res?.id ?? null;
-          } else {
-            await flashcardApi.updateFolder(folder.id, folder);
-          }
-        } catch (err) {
-          console.warn('Backend folder save failed, saving locally:', err);
-        }
-      }
-      if (folder.id == null) {
+    saveFolder(folder) {
+      const isNew = folder.id == null;
+      if (isNew) {
         folder.id = this.nextId(this.folders);
         this.folders.push(folder);
       } else {
         const idx = this.folders.findIndex(f => f.id === folder.id);
         if (idx !== -1) this.folders[idx] = folder;
-        else this.folders.push(folder);
       }
       this.persist();
       this.showFolderModal = false;
+
+      if (this.isAuthenticated) this._syncFolderToBackend(folder, isNew);
+    },
+
+    async _syncFolderToBackend(folder, isNew) {
+      try {
+        if (isNew) {
+          const res = await flashcardApi.createFolder(folder);
+          const backendId = res?.folder_id ?? res?.id;
+          if (backendId && backendId !== folder.id) {
+            const oldId = folder.id;
+            const f = this.folders.find(x => x.id === oldId);
+            if (f) f.id = backendId;
+            this.folders.forEach(c => { if (c.parentFolderId === oldId) c.parentFolderId = backendId; });
+            this.sets.forEach(s => { if (s.folderId === oldId) s.folderId = backendId; });
+            this.persist();
+          }
+        } else {
+          await flashcardApi.updateFolder(folder.id, folder);
+        }
+      } catch (err) {
+        console.warn('Backend folder save failed:', err);
+      }
     },
 
     confirmDeleteFolder(folderId) {
