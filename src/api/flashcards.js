@@ -60,7 +60,12 @@ export function normalizeSet(s) {
 
 /** Normalize a backend folder to the frontend folder shape. */
 export function normalizeFolder(f) {
-  return { id: f.folder_id, title: f.title, color: f.color };
+  return {
+    id:             f.folder_id,
+    title:          f.title,
+    color:          f.color,
+    parentFolderId: f.parent_folder_id ?? null,
+  };
 }
 
 /** Normalize the SM-2 fields returned by POST /cards/:id/review */

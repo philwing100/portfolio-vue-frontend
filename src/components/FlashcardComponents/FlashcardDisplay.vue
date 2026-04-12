@@ -2,10 +2,11 @@
   <div class="card-scene" @click="flip">
     <div class="card-inner" :class="{ flipped: isFlipped }">
       <div class="card-face card-front">
+        <div class="card-label">Front</div>
         <div class="card-content">{{ card.front }}</div>
-        <div class="card-hint">click to reveal</div>
       </div>
       <div class="card-face card-back">
+        <div class="card-label">Back</div>
         <div class="card-content">{{ card.back }}</div>
       </div>
     </div>
@@ -23,7 +24,6 @@ export default {
     return { isFlipped: false };
   },
   watch: {
-    // Reset flip state whenever a new card is shown
     card() {
       this.isFlipped = false;
     },
@@ -42,8 +42,8 @@ export default {
 <style scoped>
 .card-scene {
   width: 100%;
-  max-width: 42rem;
-  height: 16rem;
+  max-width: 44rem;
+  min-height: 14rem;
   perspective: 60rem;
   cursor: pointer;
   margin: 0 auto;
@@ -51,10 +51,10 @@ export default {
 }
 .card-inner {
   width: 100%;
-  height: 100%;
+  min-height: 14rem;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.2s ease;
+  transition: transform 0.12s ease;
 }
 .card-inner.flipped {
   transform: rotateY(180deg);
@@ -68,12 +68,26 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 2rem 2.5rem;
   background-color: var(--secondaryColor);
-  border: 0.125rem solid rgba(255, 255, 255, 0.08);
+  border: 0.0625rem solid rgba(255, 255, 255, 0.06);
+  gap: 0.75rem;
 }
 .card-back {
   transform: rotateY(180deg);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.card-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accentColor);
+  opacity: 0.35;
+  font-weight: 600;
+  align-self: flex-start;
+  position: absolute;
+  top: 1rem;
+  left: 1.25rem;
 }
 .card-content {
   font-size: 1.4rem;
@@ -81,11 +95,15 @@ export default {
   text-align: center;
   line-height: 1.6;
   white-space: pre-wrap;
+  word-break: break-word;
 }
-.card-hint {
-  margin-top: 1rem;
-  font-size: 0.78rem;
-  color: var(--accentColor);
-  opacity: 0.4;
+
+@media (max-width: 36rem) {
+  .card-face {
+    padding: 1.5rem 1.25rem;
+  }
+  .card-content {
+    font-size: 1.15rem;
+  }
 }
 </style>

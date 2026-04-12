@@ -38,12 +38,13 @@
       </div>
 
       <!-- Card -->
-      <div class="card-area">
-        <FlashcardDisplay :card="currentCard" @flip="showRatings = true" />
+      <div class="card-area" @click="flipCard">
+        <FlashcardDisplay ref="flashcard" :card="currentCard" @flip="showRatings = true" />
+        <p v-if="!showRatings" class="flip-hint">click or press <kbd>Space</kbd> to reveal</p>
       </div>
 
       <!-- Rating buttons (visible after flip) -->
-      <Transition name="fade">
+      <Transition name="slide-up">
         <div v-if="showRatings" class="ratings">
           <button
             v-for="r in RATINGS"
@@ -52,10 +53,14 @@
             :style="{ '--rating-color': r.color }"
             @click="rate(r.value)"
           >
-            {{ r.label }}
+            <span class="rating-label">{{ r.label }}</span>
+            <span class="rating-key">{{ r.value + 1 }}</span>
           </button>
         </div>
       </Transition>
+
+      <!-- Keyboard hint -->
+      <p v-if="showRatings" class="key-hint">Press 1–4 to rate</p>
     </template>
   </div>
 </template>
@@ -76,8 +81,9 @@ export default {
       currentIndex: 0,
       showRatings: false,
       done: false,
-      results: [],  // [{ card, rating }]
+      results: [],
       RATINGS,
+      rating: false,  // debounce flag
     };
   },
 
@@ -94,17 +100,59 @@ export default {
     this.cards = [...session.cards];
   },
 
+  mounted() {
+    window.addEventListener('keydown', this.onKeyDown);
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.onKeyDown);
+  },
+
   methods: {
+    flipCard() {
+      this.$refs.flashcard?.flip();
+    },
+
+    onKeyDown(e) {
+      if (this.done) {
+        if (e.code === 'Enter' || e.code === 'Space') {
+          e.preventDefault();
+          this.$router.push('/study');
+        }
+        return;
+      }
+
+      if (e.code === 'Space' && !this.showRatings) {
+        e.preventDefault();
+        this.flipCard();
+        return;
+      }
+
+      if (this.showRatings && !this.rating) {
+        const keyRating = { '1': 0, '2': 1, '3': 2, '4': 3 }[e.key];
+        if (keyRating !== undefined) {
+          e.preventDefault();
+          this.rate(keyRating);
+        }
+      }
+
+      if (e.code === 'Escape') {
+        this.$router.push('/study');
+      }
+    },
+
     async rate(rating) {
+      if (this.rating) return;  // prevent double-tap
+      this.rating = true;
+
       const card = this.currentCard;
-      if (!card) return;
+      if (!card) { this.rating = false; return; }
 
       this.results.push({ card, rating });
-
-      // onRate handles SM-2 update (remote if authenticated, local otherwise)
       if (session.onRate) await session.onRate(card.id, card.setId, rating);
-
       this.advance();
+
+      this.rating = false;
     },
 
     advance() {
@@ -156,7 +204,7 @@ export default {
   cursor: pointer;
   font-size: 0.875rem;
   opacity: 0.55;
-  transition: opacity 0.2s;
+  transition: opacity 0.15s;
   padding: 0.25rem 0.5rem;
 }
 .btn-ghost:hover { opacity: 1; }
@@ -169,27 +217,49 @@ export default {
 .progress-bar-fill {
   height: 100%;
   background: var(--accentColor);
-  transition: width 0.3s ease;
+  transition: width 0.25s ease;
 }
 
 /* ── Card area ── */
 .card-area {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 2rem 1.5rem 1rem;
+  justify-content: center;
+  padding: 2rem 1.5rem 0.5rem;
+  cursor: pointer;
+}
+.flip-hint {
+  margin-top: 1rem;
+  font-size: 0.78rem;
+  color: var(--accentColor);
+  opacity: 0.4;
+  user-select: none;
+}
+kbd {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border: 0.0625rem solid currentColor;
+  border-radius: 0.2rem;
+  font-size: 0.72rem;
+  font-family: inherit;
 }
 
 /* ── Rating buttons ── */
 .ratings {
   display: flex;
   justify-content: center;
-  gap: 0.75rem;
-  padding: 1.5rem 1rem 2.5rem;
+  gap: 0.6rem;
+  padding: 1rem 1rem 1.5rem;
   flex-wrap: wrap;
 }
 .rating-btn {
-  padding: 0.6rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 1.2rem;
   border: 0.125rem solid var(--rating-color);
   border-radius: 0.5rem;
   background: transparent;
@@ -197,12 +267,31 @@ export default {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.05s, color 0.05s;
-  min-width: 5rem;
+  transition: background 0.08s, color 0.08s, transform 0.05s;
+  min-width: 4.5rem;
 }
 .rating-btn:hover {
   background: var(--rating-color);
   color: #fff;
+}
+.rating-btn:active {
+  background: var(--rating-color);
+  color: #fff;
+  transform: scale(0.95);
+}
+.rating-key {
+  font-size: 0.65rem;
+  opacity: 0.6;
+  font-weight: 400;
+}
+.key-hint {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--accentColor);
+  opacity: 0.35;
+  padding-bottom: 1.5rem;
+  margin: 0;
+  user-select: none;
 }
 
 /* ── Summary ── */
@@ -259,11 +348,26 @@ export default {
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity 0.15s;
 }
 .btn-primary:hover { opacity: 0.85; }
 
-/* ── Fade transition ── */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
-.fade-enter-from,  .fade-leave-to      { opacity: 0; }
+/* ── Transitions ── */
+.slide-up-enter-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.slide-up-leave-active { transition: opacity 0.1s ease; }
+.slide-up-enter-from   { opacity: 0; transform: translateY(0.75rem); }
+.slide-up-leave-to     { opacity: 0; }
+
+/* ── Responsive ── */
+@media (max-width: 36rem) {
+  .ratings {
+    gap: 0.4rem;
+    padding: 0.75rem 0.5rem 1.25rem;
+  }
+  .rating-btn {
+    min-width: 3.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+  }
+}
 </style>

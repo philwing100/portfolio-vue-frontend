@@ -1,18 +1,19 @@
 <template>
-  <div class="set-card">
-    <div class="set-body" @click="$emit('study')">
+  <div class="set-card" @click="$emit('study')">
+    <div class="set-body">
       <div class="set-title">{{ set.title }}</div>
       <div class="set-meta">
         <span>{{ set.cards.length }} card{{ set.cards.length !== 1 ? 's' : '' }}</span>
-        <span v-if="dueCount > 0"  class="badge badge-due">{{ dueCount }} due</span>
-        <span v-if="newCount > 0"  class="badge badge-new">{{ newCount }} new</span>
+        <span v-if="dueCount > 0" class="badge badge-due">{{ dueCount }} due</span>
+        <span v-if="newCount > 0" class="badge badge-new">{{ newCount }} new</span>
       </div>
     </div>
-    <ContextMenu
-      :items="[{ label: 'Edit' }, { label: 'Delete' }]"
-      @click.stop
-      @select="handleMenuSelect"
-    />
+    <div @click.stop>
+      <ContextMenu
+        :items="[{ label: 'Edit' }, { label: 'Delete' }]"
+        @select="handleMenuSelect"
+      />
+    </div>
   </div>
 </template>
 
@@ -50,15 +51,21 @@ export default {
   background-color: var(--secondaryColor);
   border-radius: 0.75rem;
   padding: 0.875rem 1rem;
-  transition: opacity 0.2s, transform 0.15s;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+  user-select: none;
+}
+.set-card:hover {
+  opacity: 0.85;
+  transform: translateY(-2px);
+}
+.set-card:active {
+  transform: translateY(0);
+  opacity: 0.7;
 }
 .set-body {
   flex: 1;
   min-width: 0;
-  cursor: pointer;
-}
-.set-body:hover .set-title {
-  opacity: 0.8;
 }
 .set-title {
   font-size: 1rem;
@@ -67,7 +74,6 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: opacity 0.2s;
 }
 .set-meta {
   display: flex;
@@ -77,6 +83,7 @@ export default {
   font-size: 0.8rem;
   color: var(--accentColor);
   opacity: 0.6;
+  flex-wrap: wrap;
 }
 .badge {
   padding: 0.1rem 0.45rem;

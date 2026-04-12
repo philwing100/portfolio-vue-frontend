@@ -5,12 +5,12 @@
       <div class="folder-title">{{ folder.title }}</div>
       <div class="folder-meta">{{ setCount }} set{{ setCount !== 1 ? 's' : '' }}</div>
     </div>
-    <ContextMenu
-      :items="[{ label: 'Edit' }, { label: 'Delete' }]"
-      class="folder-menu"
-      @click.stop
-      @select="handleMenuSelect"
-    />
+    <div @click.stop>
+      <ContextMenu
+        :items="[{ label: 'Edit' }, { label: 'Delete' }]"
+        @select="handleMenuSelect"
+      />
+    </div>
   </div>
 </template>
 
@@ -43,18 +43,19 @@ export default {
   border-radius: 0.75rem;
   padding: 0.875rem 1rem;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.15s, transform 0.12s;
   user-select: none;
+  overflow: hidden;
 }
-.folder-card:hover {
-  opacity: 0.85;
-  transform: translateY(-2px);
-}
+.folder-card:hover  { opacity: 0.85; transform: translateY(-2px); }
+.folder-card:active { transform: translateY(0); opacity: 0.7; }
+
 .folder-color-bar {
-  width: 0.4rem;
-  height: 2.5rem;
+  width: 0.35rem;
+  min-height: 2.25rem;
   border-radius: 0.25rem;
   flex-shrink: 0;
+  align-self: stretch;
 }
 .folder-body {
   flex: 1;
@@ -69,12 +70,9 @@ export default {
   text-overflow: ellipsis;
 }
 .folder-meta {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--accentColor);
-  opacity: 0.55;
+  opacity: 0.5;
   margin-top: 0.2rem;
-}
-.folder-menu {
-  flex-shrink: 0;
 }
 </style>

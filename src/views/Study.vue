@@ -1,11 +1,11 @@
 <template>
   <div class="study-page">
-    <!-- Top row ─────────────────────────────────────── -->
+    <!-- Top row ─────────────────────────────────────────── -->
     <div class="top-row">
       <div class="breadcrumb">
         <router-link to="/study" class="breadcrumb-link">Study</router-link>
         <template v-for="folder in getFolderPath()" :key="folder.id">
-          <span class="breadcrumb-sep">→</span>
+          <span class="breadcrumb-sep">›</span>
           <router-link :to="`/study/folder/${folder.id}`" class="breadcrumb-link">{{ folder.title }}</router-link>
         </template>
       </div>
@@ -23,7 +23,22 @@
     <!-- Loading indicator -->
     <div v-if="loading" class="loading-bar" />
 
-    <!-- Content grid ────────────────────────────────── -->
+    <!-- ANKI explanation (root only, dismissible) -->
+    <Transition name="fade">
+      <div v-if="showAnkiInfo && !folderId" class="anki-info">
+        <div class="anki-info-body">
+          <div class="anki-info-icon">🧠</div>
+          <div class="anki-info-text">
+            <strong>Spaced Repetition</strong> — Cards you find hard reappear sooner; easy ones
+            come back days or weeks later. Rate each card <em>Again / Hard / Good / Easy</em> after
+            flipping to let the algorithm schedule the next review.
+          </div>
+          <button class="anki-info-close" @click="dismissAnkiInfo" title="Dismiss">✕</button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Content grid ────────────────────────────────────── -->
     <div class="content-grid">
       <!-- Subfolders -->
       <FolderCard
@@ -44,7 +59,7 @@
         :dueCount="getDueCount(set.cards)"
         @study="startSetStudy(set)"
         @edit="openSetModal"
-        @delete="deleteSet"
+        @delete="confirmDeleteSet"
       />
 
       <!-- Add-tile: New Folder -->
@@ -60,13 +75,12 @@
       </div>
     </div>
 
-    <!-- Modals ───────────────────────────────────────── -->
+    <!-- Modals ───────────────────────────────────────────── -->
     <FolderModal
       :isOpen="showFolderModal"
       :folder="selectedFolder"
       :allFolders="folders"
       @save="saveFolder"
-      @delete="confirmDeleteFolder"
       @close="showFolderModal = false"
     />
     <ConfirmDialog
@@ -81,15 +95,16 @@
 </template>
 
 <script>
-import FolderCard  from '@/components/FlashcardComponents/FolderCard.vue';
-import SetCard     from '@/components/FlashcardComponents/SetCard.vue';
-import FolderModal from '@/components/FlashcardComponents/FolderModal.vue';
+import FolderCard    from '@/components/FlashcardComponents/FolderCard.vue';
+import SetCard       from '@/components/FlashcardComponents/SetCard.vue';
+import FolderModal   from '@/components/FlashcardComponents/FolderModal.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
-import session     from '@/studySession.js';
+import session       from '@/studySession.js';
 import { getDueCount, buildSession, reviewCard } from '@/anki';
 import { flashcardApi, normalizeSet, normalizeFolder, normalizeAnkiResponse } from '@/api/flashcards';
 
-const LS_KEY = 'study-data';
+const LS_KEY        = 'study-data';
+const ANKI_INFO_KEY = 'study-anki-info-dismissed';
 
 const DEFAULT_FOLDERS = [
   { id: 1, title: 'Languages',        color: '#4CAF50', parentFolderId: null },
@@ -134,8 +149,9 @@ export default {
       showDeleteConfirm:    false,
       deleteConfirmTitle:   '',
       deleteConfirmMessage: '',
-      pendingDeleteType:    null,  // 'folder' or 'set'
+      pendingDeleteType:    null,
       pendingDeleteId:      null,
+      showAnkiInfo:         !localStorage.getItem(ANKI_INFO_KEY),
     };
   },
 
@@ -171,13 +187,11 @@ export default {
   },
 
   activated() {
-    // Reload data when this component becomes active (e.g., returning from SetEditor)
     this.loadFromLocalStorage();
   },
 
   watch: {
     $route() {
-      // Reload data when route changes within study
       this.loadFromLocalStorage();
     },
   },
@@ -186,16 +200,12 @@ export default {
     // ── Data loading ──────────────────────────────────────────────────────
 
     async loadData() {
-      // Show cached data immediately for instant paint
       this.loadFromLocalStorage();
-
       try {
         await this.$store.dispatch('checkAuth');
         if (!this.isAuthenticated) return;
         await this.loadFromBackend();
-      } catch {
-        // Remain on cached data
-      }
+      } catch { /* remain on cached data */ }
     },
 
     loadFromLocalStorage() {
@@ -214,33 +224,32 @@ export default {
         this.sets    = JSON.parse(JSON.stringify(DEFAULT_SETS));
       }
       this.$store.commit('SET_FOLDERS', this.folders);
-      this.$store.commit('SET_SETS', this.sets);
+      this.$store.commit('SET_SETS',    this.sets);
     },
 
     async loadFromBackend() {
       this.loading = true;
       try {
-        // Fetch folders + all sets in parallel
-        const [foldersRes, setsOverviewRes] = await Promise.all([
+        // flashcardApi methods already unwrap .data — results are raw arrays/objects
+        const [foldersData, setsOverview] = await Promise.all([
           flashcardApi.getFolders(),
           flashcardApi.getSets(),
         ]);
 
-        this.folders = (foldersRes.data ?? []).map(normalizeFolder);
+        this.folders = (Array.isArray(foldersData) ? foldersData : []).map(normalizeFolder);
 
-        // Fetch full card data for each set in parallel
-        const overview = setsOverviewRes.data ?? [];
+        const overview = Array.isArray(setsOverview) ? setsOverview : [];
         const fullSets = await Promise.all(
           overview.map(s =>
-            flashcardApi.getSet(s.set_id)
-              .then(r => normalizeSet(r.data))
+            flashcardApi.getSet(s.set_id ?? s.id)
+              .then(setData => normalizeSet(setData))
               .catch(() => null)
           )
         );
 
         this.sets = fullSets.filter(Boolean);
         this.$store.commit('SET_FOLDERS', this.folders);
-        this.$store.commit('SET_SETS', this.sets);
+        this.$store.commit('SET_SETS',    this.sets);
         this.persist();
       } finally {
         this.loading = false;
@@ -250,7 +259,7 @@ export default {
     persist() {
       localStorage.setItem(LS_KEY, JSON.stringify({ folders: this.folders, sets: this.sets }));
       this.$store.commit('SET_FOLDERS', this.folders);
-      this.$store.commit('SET_SETS', this.sets);
+      this.$store.commit('SET_SETS',    this.sets);
     },
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -269,6 +278,11 @@ export default {
         current = folder.parentFolderId;
       }
       return path;
+    },
+
+    dismissAnkiInfo() {
+      this.showAnkiInfo = false;
+      localStorage.setItem(ANKI_INFO_KEY, '1');
     },
 
     // ── Session launchers ─────────────────────────────────────────────────
@@ -324,7 +338,6 @@ export default {
     // ── Folder CRUD ───────────────────────────────────────────────────────
 
     openFolderModal(folder) {
-      // If creating a new folder within a subfolder, set the parent automatically
       if (!folder && this.folderId) {
         folder = { id: null, title: '', color: '#4CAF50', parentFolderId: this.folderId };
       }
@@ -337,7 +350,7 @@ export default {
         try {
           if (folder.id == null) {
             const res = await flashcardApi.createFolder(folder);
-            folder.id = res.data.folder_id;
+            folder.id = res?.folder_id ?? res?.id ?? null;
           } else {
             await flashcardApi.updateFolder(folder.id, folder);
           }
@@ -360,40 +373,26 @@ export default {
     confirmDeleteFolder(folderId) {
       const folder = this.folders.find(f => f.id === folderId);
       if (!folder) return;
-      this.pendingDeleteType = 'folder';
-      this.pendingDeleteId = folderId;
-      this.deleteConfirmTitle = 'Delete Folder?';
-      this.deleteConfirmMessage = `Are you sure you want to delete "${folder.title}"? All sets in this folder will be moved to the root level.`;
-      this.showDeleteConfirm = true;
+      this.pendingDeleteType    = 'folder';
+      this.pendingDeleteId      = folderId;
+      this.deleteConfirmTitle   = 'Delete Folder?';
+      this.deleteConfirmMessage = `Delete "${folder.title}"? Sub-folders and sets will be moved up one level.`;
+      this.showDeleteConfirm    = true;
     },
 
     async _executeDeleteFolder(folderId) {
       if (this.isAuthenticated) {
-        try {
-          await flashcardApi.deleteFolder(folderId);
-        } catch (err) {
-          console.warn('Backend folder delete failed:', err);
-        }
+        try { await flashcardApi.deleteFolder(folderId); } catch (err) { console.warn('Backend folder delete failed:', err); }
       }
-      const deletedFolder = this.folders.find(f => f.id === folderId);
-      
-      // Move child folders to the parent of the deleted folder
-      if (deletedFolder) {
-        this.folders.forEach(f => {
-          if (f.parentFolderId === folderId) {
-            f.parentFolderId = deletedFolder.parentFolderId;
-          }
-        });
-      }
-      
-      // Move sets to the parent of the deleted folder
-      this.sets.forEach(s => {
-        if (s.folderId === folderId) {
-          s.folderId = deletedFolder?.parentFolderId ?? null;
-        }
+      const deleted = this.folders.find(f => f.id === folderId);
+      // Reparent child folders
+      this.folders.forEach(f => {
+        if (f.parentFolderId === folderId) f.parentFolderId = deleted?.parentFolderId ?? null;
       });
-      
-      // Remove the folder
+      // Reparent sets
+      this.sets.forEach(s => {
+        if (s.folderId === folderId) s.folderId = deleted?.parentFolderId ?? null;
+      });
       this.folders = this.folders.filter(f => f.id !== folderId);
       this.persist();
     },
@@ -401,36 +400,22 @@ export default {
     // ── Set CRUD ──────────────────────────────────────────────────────────
 
     openSetModal(set) {
-      if (set) {
-        // Navigate to edit page
-        this.$router.push(`/study/set/${set.id}`);
-      } else {
-        // Navigate to create new set page
-        this.$router.push(`/study/set/new`);
-      }
-    },
-
-    reloadFromStorage() {
-      this.loadFromLocalStorage();
+      this.$router.push(set ? `/study/set/${set.id}` : '/study/set/new');
     },
 
     confirmDeleteSet(setId) {
       const set = this.sets.find(s => s.id === setId);
       if (!set) return;
-      this.pendingDeleteType = 'set';
-      this.pendingDeleteId = setId;
-      this.deleteConfirmTitle = 'Delete Set?';
-      this.deleteConfirmMessage = `Are you sure you want to delete "${set.title}"? This action cannot be undone.`;
-      this.showDeleteConfirm = true;
+      this.pendingDeleteType    = 'set';
+      this.pendingDeleteId      = setId;
+      this.deleteConfirmTitle   = 'Delete Set?';
+      this.deleteConfirmMessage = `Delete "${set.title}"? This cannot be undone.`;
+      this.showDeleteConfirm    = true;
     },
 
     async _executeDeleteSet(setId) {
       if (this.isAuthenticated) {
-        try {
-          await flashcardApi.deleteSet(setId);
-        } catch (err) {
-          console.warn('Backend delete failed:', err);
-        }
+        try { await flashcardApi.deleteSet(setId); } catch (err) { console.warn('Backend delete failed:', err); }
       }
       this.sets = this.sets.filter(s => s.id !== setId);
       this.persist();
@@ -443,7 +428,7 @@ export default {
         await this._executeDeleteSet(this.pendingDeleteId);
       }
       this.pendingDeleteType = null;
-      this.pendingDeleteId = null;
+      this.pendingDeleteId   = null;
     },
   },
 };
@@ -463,60 +448,64 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
-  height: 4rem;
+  height: 3.75rem;
   background-color: var(--primaryColor);
   border-bottom: 0.0625rem solid var(--secondaryColor);
   position: sticky;
   top: 0;
   z-index: 3;
+  gap: 1rem;
 }
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
 }
 .breadcrumb-link {
   color: var(--accentColor);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 500;
-  opacity: 0.8;
-  transition: opacity 0.2s;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  white-space: nowrap;
 }
 .breadcrumb-link:hover { opacity: 1; }
+.breadcrumb-link:last-child { opacity: 1; }
 .breadcrumb-sep {
   color: var(--accentColor);
-  opacity: 0.5;
-  font-size: 0.85rem;
-}
-.page-title {
-  font-size: 1.3rem;
-  font-weight: 600;
-  color: var(--accentColor);
+  opacity: 0.4;
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 .anki-all-btn {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.2rem;
+  gap: 0.4rem;
+  padding: 0.45rem 1.1rem;
   background: var(--accentColor);
   color: var(--primaryColor);
   border: none;
   border-radius: 0.5rem;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
 }
 .anki-all-btn:hover    { opacity: 0.85; }
-.anki-all-btn:disabled { opacity: 0.35; cursor: default; }
+.anki-all-btn:disabled { opacity: 0.3; cursor: default; }
 .anki-badge {
   background: #e53935;
   color: #fff;
-  padding: 0.1rem 0.45rem;
+  padding: 0.08rem 0.4rem;
   border-radius: 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 
 /* ── Loading bar ── */
@@ -531,10 +520,51 @@ export default {
   100% { background-position:  200% 0; }
 }
 
+/* ── ANKI info banner ── */
+.anki-info {
+  margin: 1rem 1.5rem 0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 0.0625rem solid var(--secondaryColor);
+}
+.anki-info-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--secondaryColor);
+}
+.anki-info-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+.anki-info-text {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--accentColor);
+  opacity: 0.85;
+  line-height: 1.6;
+}
+.anki-info-close {
+  background: none;
+  border: none;
+  color: var(--accentColor);
+  opacity: 0.45;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.15rem;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+  line-height: 1;
+  align-self: flex-start;
+}
+.anki-info-close:hover { opacity: 0.9; }
+
 /* ── Grid ── */
 .content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 0.75rem;
   padding: 1.25rem 1.5rem;
 }
@@ -543,18 +573,39 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   border: 0.125rem dashed var(--accentColor);
   border-radius: 0.75rem;
   padding: 1.25rem;
-  min-height: 5rem;
+  min-height: 4.5rem;
   cursor: pointer;
   color: var(--accentColor);
-  opacity: 0.45;
-  font-size: 0.9rem;
-  transition: opacity 0.2s, transform 0.15s;
+  opacity: 0.38;
+  font-size: 0.85rem;
+  transition: opacity 0.15s, transform 0.12s;
   user-select: none;
 }
-.add-tile:hover { opacity: 0.85; transform: translateY(-2px); }
-.add-tile-icon  { font-size: 1.4rem; }
+.add-tile:hover { opacity: 0.75; transform: translateY(-2px); }
+.add-tile-icon  { font-size: 1.3rem; }
+
+/* ── Transitions ── */
+.fade-enter-active { transition: opacity 0.2s ease; }
+.fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-from,
+.fade-leave-to     { opacity: 0; }
+
+/* ── Responsive ── */
+@media (max-width: 36rem) {
+  .top-row {
+    padding: 0 1rem;
+  }
+  .content-grid {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    gap: 0.6rem;
+  }
+  .anki-info {
+    margin: 0.75rem 1rem 0;
+  }
+}
 </style>
