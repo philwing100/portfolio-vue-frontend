@@ -21,7 +21,7 @@
         @touchend="handleTouchEnd"
       >
         <!-- Pomodoro is only visible on non-mobile layouts -->
-        <Pomodoro v-if="!isMobile" />
+        <Pomodoro v-if="!isMobile" :currentTask="currentInProgressTask" />
 
         <!-- Desktop / tablet: show calendar and list side by side -->
         <template v-if="!isMobile">
@@ -92,6 +92,32 @@ export default {
   },
   computed: {
     ...mapState(['isAuthenticated', 'user']),
+
+    currentInProgressTask() {
+      const now = new Date();
+      // Only relevant when viewing today
+      if (this.currentDate !== getTodayDate()) return null;
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      for (const list of this.dailyLists) {
+        if (list.visible === false) continue;
+        for (const item of (list.items || [])) {
+          if (item.complete) continue;
+          if (!item.textString) continue;
+          const startTime = item.scheduledStartTime || item.scheduledTime;
+          if (!startTime) continue;
+          const startMin = this._timeToMinutes(startTime);
+          if (startMin === 0 && !startTime) continue;
+          const endMin = item.scheduledEndTime
+            ? this._timeToMinutes(item.scheduledEndTime)
+            : startMin + (item.taskTimeEstimate || 60);
+          if (currentMinutes >= startMin && currentMinutes < endMin) {
+            return item.textString;
+          }
+        }
+      }
+      return null;
+    },
   },
   watch: {
     dailyLists: {
@@ -114,6 +140,17 @@ export default {
     },
   },
   methods: {
+    _timeToMinutes(time) {
+      if (!time) return 0;
+      const m = time.trim().match(/(\d{1,2}):(\d{2})(am|pm)/i);
+      if (!m) return 0;
+      let h = parseInt(m[1], 10);
+      const min = parseInt(m[2], 10);
+      const period = m[3].toLowerCase();
+      if (period === 'pm' && h !== 12) h += 12;
+      if (period === 'am' && h === 12) h = 0;
+      return h * 60 + min;
+    },
     handleDateChange(date) {
       this.currentDate = date;
     },

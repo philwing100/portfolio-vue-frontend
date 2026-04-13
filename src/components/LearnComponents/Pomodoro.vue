@@ -35,6 +35,9 @@
 <script>
 export default {
   name: 'Pomodoro',
+  props: {
+    currentTask: { type: String, default: null },
+  },
   data() {
     return {
       workDuration: 50 * 60,
@@ -141,6 +144,13 @@ export default {
       return cy - r * Math.cos(this.markerAngle);
     },
   },
+  watch: {
+    currentTask(val) {
+      if (this.bc) {
+        this.bc.postMessage({ type: 'current_task', payload: { text: val || '' } });
+      }
+    },
+  },
   methods: {
     start(broadcastCommand = true) {
       if (!this.startTimestamp) this.startTimestamp = Date.now();
@@ -244,7 +254,11 @@ export default {
       }
     },
     togglePiP() {
-      if (this.bc) this.bc.postMessage({ type: 'toggle_pip' });
+      if (this.bc) {
+        this.bc.postMessage({ type: 'toggle_pip' });
+        // Send current task immediately so PiP has it when it opens
+        this.bc.postMessage({ type: 'current_task', payload: { text: this.currentTask || '' } });
+      }
     },
     startDrag(evt) {
       if (!this.canDrag) return;

@@ -43,9 +43,11 @@ export default {
   },
   mounted() {
     document.addEventListener('click', this.onClickOutside);
+    document.addEventListener('touchstart', this.onClickOutside, { passive: true });
   },
   beforeUnmount() {
     document.removeEventListener('click', this.onClickOutside);
+    document.removeEventListener('touchstart', this.onClickOutside);
   },
   methods: {
     toggle() {

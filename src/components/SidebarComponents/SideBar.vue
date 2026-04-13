@@ -22,7 +22,13 @@
       </router-link>
     </nav>
   </div>
-  <router-view :class="{ 'paddingWithSidebar': !toggleBar, 'paddingWithoutSidebar': toggleBar }"></router-view>
+  <!-- Overlay: only on mobile when sidebar is open -->
+  <div
+    v-if="isMobile && !toggleBar"
+    class="sidebar-overlay"
+    @click="toggleWidth"
+  ></div>
+  <router-view :class="{ 'paddingWithSidebar': !toggleBar && !isMobile, 'paddingWithoutSidebar': toggleBar || isMobile }"></router-view>
 </template>
 
 <script>
@@ -286,5 +292,12 @@ export default {
 
 .standout {
   background-color: red;
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 3;
 }
 </style>

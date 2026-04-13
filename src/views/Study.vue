@@ -382,7 +382,7 @@ export default {
         if (isAuth) {
           try {
             const res = await flashcardApi.reviewCard(cardId, rating);
-            this._applyAnkiUpdate(cardId, setId, normalizeAnkiResponse(res.data));
+            this._applyAnkiUpdate(cardId, setId, normalizeAnkiResponse(res));
           } catch (err) {
             console.warn('Review sync failed, applying local SM-2:', err);
             this._localReview(cardId, setId, rating);

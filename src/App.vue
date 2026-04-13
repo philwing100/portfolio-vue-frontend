@@ -101,8 +101,26 @@ export default {
           });
         } catch (e) {}
 
+        // Style the PiP body to fill the window and remove default browser margins
+        pipWin.document.body.style.cssText = 'margin:0;padding:0;overflow:hidden;background:#111827;';
+
+        // Copy CSS custom properties (theme vars) from the main document
+        try {
+          const rootStyle = getComputedStyle(document.documentElement);
+          const cssVars = ['--primaryColor', '--secondaryColor', '--accentColor'];
+          const varDecls = cssVars
+            .map(v => `${v}:${rootStyle.getPropertyValue(v).trim() || ''}`)
+            .filter(d => d.split(':')[1])
+            .join(';');
+          if (varDecls) {
+            const styleEl = pipWin.document.createElement('style');
+            styleEl.textContent = `:root{${varDecls}}`;
+            pipWin.document.head.appendChild(styleEl);
+          }
+        } catch (e) {}
+
         // create root and mount the PiP Vue app
-        pipWin.document.body.innerHTML = '<div id="pip-root"></div>';
+        pipWin.document.body.innerHTML = '<div id="pip-root" style="width:100%;height:100vh;box-sizing:border-box;"></div>';
         createApp(PiP).mount(pipWin.document.getElementById('pip-root'));
 
         // copy any new style tags Vue injected during mount (scoped styles)
@@ -124,6 +142,8 @@ export default {
       }
       localStorage.setItem('pomodoro_show_pip', 'true');
       this.bc.postMessage({ type: 'pip_status', payload: { isOpen: !!this.pipWindow }});
+      // Ask Pomodoro to re-broadcast state + current task so the new PiP window gets them
+      setTimeout(() => { this.bc.postMessage({ type: 'request_state' }); }, 100);
       // poll for pip closed by user
       if (this.pipCheckerInterval) clearInterval(this.pipCheckerInterval);
       this.pipCheckerInterval = setInterval(() => {

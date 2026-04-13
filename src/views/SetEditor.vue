@@ -325,7 +325,7 @@ export default {
 
     // ── Save ──────────────────────────────────────────────────────────────
 
-    save() {
+    async save() {
       if (!this.local.title.trim()) return;
 
       this._persistDelimiters();
@@ -335,6 +335,7 @@ export default {
         cards: this.local.cards.filter(c => c.front.trim() || c.back.trim()),
       };
 
+      this.saving = true;
       this._saveLocally(setData);
       const localId = setData.id;
 
@@ -344,6 +345,7 @@ export default {
           .catch(err => console.warn('Backend save failed:', err));
       }
 
+      this.saving = false;
       this.$router.push('/study');
     },
 
