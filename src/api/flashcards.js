@@ -2,21 +2,21 @@
  * Flashcard REST API client.
  *
  * Endpoints (all under /api/flashcards/*):
- *   GET    /sets                  — list all sets (metadata + card_count)
- *   POST   /sets                  — create set
- *   GET    /sets/:id              — get set + all cards with SM-2 state
- *   PUT    /sets/:id              — update set metadata
- *   DELETE /sets/:id              — delete set (cascades to cards)
- *   POST   /sets/:id/cards        — add one or many cards
- *   PUT    /cards/:id             — update card term/definition
- *   DELETE /cards/:id             — delete card
- *   POST   /cards/:id/review      — submit review grade, returns updated SM-2 state
- *   GET    /study                 — get due + new cards across all sets
- *
- * MISSING BACKEND ROUTES (flag to backend dev):
- *   - GET /sets should include due_count per set to avoid N+1 fetches on page load
- *   - GET /study should include set_id per card so reviews can update the correct set
- *   - No folder endpoints; folderId is serialized into the set's description JSON instead
+ *   GET    /sets                    — list all sets; accepts ?folder_id= to scope
+ *   POST   /sets                    — create set; accepts folder_id in body
+ *   GET    /sets/:id                — get set + all cards with SM-2 state
+ *   PUT    /sets/:id                — update set; accepts folder_id (null removes folder)
+ *   DELETE /sets/:id                — delete set (cascades to cards)
+ *   POST   /sets/:id/cards          — add one or many cards
+ *   PUT    /cards/:id               — update card term/definition
+ *   DELETE /cards/:id               — delete card
+ *   POST   /cards/:id/review        — submit review grade, returns updated SM-2 state
+ *   GET    /cards/all               — all due+new cards; optional ?page=&limit=
+ *   GET    /study/folder/:folderId  — folder-scoped study session (recursive)
+ *   GET    /folders                 — list folders; returns parent_folder_id per folder
+ *   POST   /folders                 — create folder; accepts parent_folder_id
+ *   PUT    /folders/:id             — update folder; parent_folder_id key triggers reparent
+ *   DELETE /folders/:id             — delete (ON DELETE SET NULL cleans up children)
  */
 
 import { instance as axios } from '@/axios';
@@ -47,7 +47,7 @@ export function normalizeCard(c, setId) {
 
 /**
  * Normalize a backend set (with cards array) to the frontend set shape.
- * folderId and options are stored as JSON in the set's description field.
+ * folder_id is now a first-class backend field; options are still in description JSON.
  */
 export function normalizeSet(s) {
   let meta = {};
@@ -55,8 +55,9 @@ export function normalizeSet(s) {
   return {
     id:       s.set_id,
     title:    s.title,
-    folderId: meta.folderId ?? null,
-    options:  meta.options  ?? { newPerDay: 20, orderMode: 'random' },
+    // Prefer backend's folder_id; fall back to legacy description JSON for older records
+    folderId: s.folder_id ?? meta.folderId ?? null,
+    options:  meta.options ?? { newPerDay: 20, orderMode: 'random' },
     cards:    (s.cards || []).map(c => normalizeCard(c, s.set_id)),
   };
 }
@@ -83,13 +84,12 @@ export function normalizeAnkiResponse(d) {
 
 // ── Serialization: frontend shape → backend payload ────────────────────────
 
-function serializeSetMeta(set) {
+function serializeSetPayload(set) {
   return {
-    title:       set.title,
-    description: JSON.stringify({
-      folderId: set.folderId ?? null,
-      options:  set.options,
-    }),
+    title:     set.title,
+    folder_id: set.folderId ?? null,
+    // options remain in description; backend has no native field for them
+    description: JSON.stringify({ options: set.options }),
     tags: [],
   };
 }
@@ -98,16 +98,25 @@ function serializeSetMeta(set) {
 
 export const flashcardApi = {
   // Folders
-  getFolders:    ()           => axios.get('/flashcards/folders').then(unwrap),
-  createFolder:  (folder)     => axios.post('/flashcards/folders', { title: folder.title, color: folder.color }).then(unwrap),
-  updateFolder:  (id, folder) => axios.put(`/flashcards/folders/${id}`, { title: folder.title, color: folder.color }).then(unwrap),
-  deleteFolder:  (id)         => axios.delete(`/flashcards/folders/${id}`).then(unwrap),
+  getFolders:   ()           => axios.get('/flashcards/folders').then(unwrap),
+  createFolder: (folder)     => axios.post('/flashcards/folders', {
+    title:            folder.title,
+    color:            folder.color,
+    parent_folder_id: folder.parentFolderId ?? null,
+  }).then(unwrap),
+  updateFolder: (id, folder) => axios.put(`/flashcards/folders/${id}`, {
+    title:            folder.title,
+    color:            folder.color,
+    // Always include parent_folder_id (even as null) so the backend triggers a reparent
+    parent_folder_id: folder.parentFolderId ?? null,
+  }).then(unwrap),
+  deleteFolder: (id)         => axios.delete(`/flashcards/folders/${id}`).then(unwrap),
 
   // Sets
-  getSets:   ()        => axios.get('/flashcards/sets').then(unwrap),
+  getSets:   (params)  => axios.get('/flashcards/sets', { params }).then(unwrap),
   getSet:    (id)      => axios.get(`/flashcards/sets/${id}`).then(unwrap),
-  createSet: (set)     => axios.post('/flashcards/sets', serializeSetMeta(set)).then(unwrap),
-  updateSet: (id, set) => axios.put(`/flashcards/sets/${id}`, serializeSetMeta(set)).then(unwrap),
+  createSet: (set)     => axios.post('/flashcards/sets', serializeSetPayload(set)).then(unwrap),
+  updateSet: (id, set) => axios.put(`/flashcards/sets/${id}`, serializeSetPayload(set)).then(unwrap),
   deleteSet: (id)      => axios.delete(`/flashcards/sets/${id}`).then(unwrap),
 
   // Cards — backend accepts a single object or an array
@@ -126,4 +135,10 @@ export const flashcardApi = {
     `/flashcards/cards/${cardId}/review`,
     { grade: GRADE_MAP[rating] }
   ).then(unwrap),
+
+  // All due+new cards across all sets (optional pagination)
+  getAllCards: (params) => axios.get('/flashcards/cards/all', { params }).then(unwrap),
+
+  // Folder-scoped study session — returns due+new cards recursively for a folder
+  getFolderStudy: (folderId) => axios.get(`/flashcards/study/folder/${folderId}`).then(unwrap),
 };

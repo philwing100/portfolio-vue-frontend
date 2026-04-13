@@ -336,7 +336,9 @@ export default {
         if (!folder || folder.parentFolderId === targetFolderId) return;
         folder.parentFolderId = targetFolderId;
         this.persist();
-        // Backend folders table has no parent_folder_id column — nesting is client-side only.
+        if (this.isAuthenticated) {
+          flashcardApi.updateFolder(id, folder).catch(err => console.warn('Reparent folder sync failed:', err));
+        }
       } else if (type === 'set') {
         const set = this.sets.find(s => s.id === id);
         if (!set || set.folderId === targetFolderId) return;
