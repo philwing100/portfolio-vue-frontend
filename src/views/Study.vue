@@ -334,18 +334,32 @@ export default {
         if (this._isDescendant(targetFolderId, id)) return;
         const folder = this.folders.find(f => f.id === id);
         if (!folder || folder.parentFolderId === targetFolderId) return;
+
+        const previousParentId = folder.parentFolderId;
         folder.parentFolderId = targetFolderId;
         this.persist();
+
         if (this.isAuthenticated) {
-          flashcardApi.moveFolder(id, targetFolderId).catch(err => console.warn('Reparent folder sync failed:', err));
+          flashcardApi.moveFolder(id, targetFolderId).catch(err => {
+            console.warn('Reparent folder sync failed:', err);
+            folder.parentFolderId = previousParentId; // Revert local change
+            this.persist();
+          });
         }
       } else if (type === 'set') {
         const set = this.sets.find(s => s.id === id);
         if (!set || set.folderId === targetFolderId) return;
+
+        const previousFolderId = set.folderId;
         set.folderId = targetFolderId;
         this.persist();
+
         if (this.isAuthenticated) {
-          flashcardApi.moveSet(set.id, targetFolderId).catch(err => console.warn('Reparent set sync failed:', err));
+          flashcardApi.moveSet(id, targetFolderId).catch(err => {
+            console.warn('Reparent set sync failed:', err);
+            set.folderId = previousFolderId; // Revert local change
+            this.persist();
+          });
         }
       }
     },
