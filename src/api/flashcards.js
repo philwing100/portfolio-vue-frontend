@@ -11,11 +11,14 @@
  *   PUT    /cards/:id               — update card term/definition
  *   DELETE /cards/:id               — delete card
  *   POST   /cards/:id/review        — submit review grade, returns updated SM-2 state
+ *   PATCH  /sets/:id/move           — move a set; body { folder_id: uuid|null }
  *   GET    /cards/all               — all due+new cards; optional ?page=&limit=
  *   GET    /study/folder/:folderId  — folder-scoped study session (recursive)
  *   GET    /folders                 — list folders; returns parent_folder_id per folder
+ *   GET    /folders/:id             — one-level view; { folder, subfolders, sets }; id="root" for top-level
  *   POST   /folders                 — create folder; accepts parent_folder_id
  *   PUT    /folders/:id             — update folder; parent_folder_id key triggers reparent
+ *   PATCH  /folders/:id/move        — move folder (rejects cycles); body { parent_folder_id: uuid|null }
  *   DELETE /folders/:id             — delete (ON DELETE SET NULL cleans up children)
  */
 
@@ -111,6 +114,13 @@ export const flashcardApi = {
     parent_folder_id: folder.parentFolderId ?? null,
   }).then(unwrap),
   deleteFolder: (id)         => axios.delete(`/flashcards/folders/${id}`).then(unwrap),
+  // One-level folder view: pass "root" for top-level. Returns { folder, subfolders, sets } with counts.
+  getFolderView: (id)        => axios.get(`/flashcards/folders/${id ?? 'root'}`).then(unwrap),
+  // Drag-and-drop moves. parentFolderId/folderId === null moves to root.
+  moveFolder: (id, parentFolderId) => axios.patch(
+    `/flashcards/folders/${id}/move`,
+    { parent_folder_id: parentFolderId ?? null }
+  ).then(unwrap),
 
   // Sets
   getSets:   (params)  => axios.get('/flashcards/sets', { params }).then(unwrap),
@@ -118,6 +128,10 @@ export const flashcardApi = {
   createSet: (set)     => axios.post('/flashcards/sets', serializeSetPayload(set)).then(unwrap),
   updateSet: (id, set) => axios.put(`/flashcards/sets/${id}`, serializeSetPayload(set)).then(unwrap),
   deleteSet: (id)      => axios.delete(`/flashcards/sets/${id}`).then(unwrap),
+  moveSet:   (id, folderId) => axios.patch(
+    `/flashcards/sets/${id}/move`,
+    { folder_id: folderId ?? null }
+  ).then(unwrap),
 
   // Cards — backend accepts a single object or an array
   addCards:   (setId, cards) => axios.post(

@@ -55,14 +55,24 @@ export default {
         byParent.get(key).push(f);
       });
       const out = [];
+      const visited = new Set();
       const walk = (parent, depth) => {
         const children = byParent.get(parent) ?? [];
         children.forEach(c => {
+          if (visited.has(c.id)) return; // guard against cycles / self-parenting
+          visited.add(c.id);
           out.push({ ...c, depth });
           walk(c.id, depth + 1);
         });
       };
       walk(null, 0);
+      // Render orphaned folders (parent id not present in folder set) at the root
+      this.folders.forEach(f => {
+        if (!visited.has(f.id)) {
+          visited.add(f.id);
+          out.push({ ...f, depth: 0 });
+        }
+      });
       return out;
     },
   },

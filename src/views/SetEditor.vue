@@ -258,6 +258,11 @@ export default {
 
   created() {
     this.loadSet();
+    // New-set flow only: inherit folder from ?folderId= query (set by Study.vue when inside a folder)
+    if (!this.isEdit) {
+      const q = this.$route.query.folderId;
+      if (q != null && q !== '') this.local.folderId = q;
+    }
   },
 
   methods: {

@@ -337,7 +337,7 @@ export default {
         folder.parentFolderId = targetFolderId;
         this.persist();
         if (this.isAuthenticated) {
-          flashcardApi.updateFolder(id, folder).catch(err => console.warn('Reparent folder sync failed:', err));
+          flashcardApi.moveFolder(id, targetFolderId).catch(err => console.warn('Reparent folder sync failed:', err));
         }
       } else if (type === 'set') {
         const set = this.sets.find(s => s.id === id);
@@ -345,7 +345,7 @@ export default {
         set.folderId = targetFolderId;
         this.persist();
         if (this.isAuthenticated) {
-          flashcardApi.updateSet(set.id, set).catch(err => console.warn('Reparent set sync failed:', err));
+          flashcardApi.moveSet(set.id, targetFolderId).catch(err => console.warn('Reparent set sync failed:', err));
         }
       }
     },
@@ -486,7 +486,12 @@ export default {
     // ── Set CRUD ──────────────────────────────────────────────────────────
 
     openSetModal(set) {
-      this.$router.push(set ? `/study/set/${set.id}` : '/study/set/new');
+      if (set) { this.$router.push(`/study/set/${set.id}`); return; }
+      // When creating a new set from inside a folder, inherit the current folder as the parent
+      this.$router.push({
+        path: '/study/set/new',
+        query: this.folderId ? { folderId: this.folderId } : {},
+      });
     },
 
     confirmDeleteSet(setId) {
