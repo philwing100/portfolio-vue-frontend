@@ -164,7 +164,7 @@ import Tabs         from '@/components/GeneralComponents/Tabs.vue';
 import Dropdown     from '@/components/GeneralComponents/Dropdown.vue';
 import IntInput     from '@/components/GeneralComponents/IntInput.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
-import { flashcardApi } from '@/api/flashcards';
+import { flashcardApi, normalizeSet } from '@/api/flashcards';
 import session from '@/studySession.js';
 import { buildSession, reviewCard } from '@/anki';
 
@@ -256,22 +256,41 @@ export default {
     cardDelimiter()  { this._persistDelimiters(); },
   },
 
-  created() {
-    this.loadSet();
+  async created() {
     // New-set flow only: inherit folder from ?folderId= query (set by Study.vue when inside a folder)
     if (!this.isEdit) {
       const q = this.$route.query.folderId;
       if (q != null && q !== '') this.local.folderId = q;
+      return;
     }
+    await this.loadSet();
   },
 
   methods: {
-    loadSet() {
+    async loadSet() {
       if (!this.isEdit) return;
+
+      // Cards are never cached — fetch fresh from the backend when authenticated.
+      if (this.isAuth) {
+        this.saving = true;
+        try {
+          const data = await flashcardApi.getSet(this.setId);
+          const full = normalizeSet(data);
+          this.local         = { ...full, options: { ...full.options }, cards: full.cards.map(c => ({ ...c })) };
+          this.originalCards = full.cards.map(c => ({ ...c }));
+          return;
+        } catch (err) {
+          console.warn('Set fetch failed, falling back to in-memory data:', err);
+        } finally {
+          this.saving = false;
+        }
+      }
+
+      // Offline / unauthenticated fallback — use whatever is in the store
       const set = this.allSets.find(s => s.id === this.setId);
       if (!set) { this.$router.push('/study'); return; }
-      this.local         = { ...set, options: { ...set.options }, cards: set.cards.map(c => ({ ...c })) };
-      this.originalCards = set.cards.map(c => ({ ...c }));
+      this.local         = { ...set, options: { ...set.options }, cards: (set.cards || []).map(c => ({ ...c })) };
+      this.originalCards = (set.cards || []).map(c => ({ ...c }));
     },
 
     addCard()          { this.local.cards.push(newCard()); },
@@ -409,18 +428,27 @@ export default {
 
         const lookupId = replaceId ?? set.id;
         const idx = lookupId != null ? data.sets.findIndex(s => s.id === lookupId) : -1;
+
+        if (set.id == null && idx === -1) {
+          const numericIds = data.sets.map(s => s.id).filter(id => typeof id === 'number');
+          set.id = numericIds.length ? Math.max(...numericIds) + 1 : 1;
+        }
+
+        // Cards are never cached — only persist the set summary (strip cards).
+        const { cards, ...summary } = set;
         if (idx !== -1) {
-          data.sets[idx] = set;
+          data.sets[idx] = summary;
         } else {
-          if (set.id == null) {
-            const numericIds = data.sets.map(s => s.id).filter(id => typeof id === 'number');
-            set.id = numericIds.length ? Math.max(...numericIds) + 1 : 1;
-          }
-          data.sets.push(set);
+          data.sets.push(summary);
         }
 
         localStorage.setItem(LS_KEY, JSON.stringify(data));
-        this.$store.commit('SET_SETS',    data.sets);
+        // Keep the full set (with cards) in the in-memory store so the current
+        // session can still render until the next explicit refetch.
+        const memorySets = [...data.sets];
+        const memoryIdx = memorySets.findIndex(s => s.id === set.id);
+        if (memoryIdx !== -1) memorySets[memoryIdx] = set;
+        this.$store.commit('SET_SETS',    memorySets);
         this.$store.commit('SET_FOLDERS', data.folders);
       } catch { /* ignore */ }
     },

@@ -289,7 +289,8 @@ export default {
         if (raw) {
           const { folders, sets } = JSON.parse(raw);
           this.folders = folders;
-          this.sets    = sets;
+          // Cards aren't cached — normalize to empty arrays until a fresh fetch.
+          this.sets    = (sets || []).map(s => ({ ...s, cards: [] }));
         } else {
           this.folders = JSON.parse(JSON.stringify(DEFAULT_FOLDERS));
           this.sets    = JSON.parse(JSON.stringify(DEFAULT_SETS));
@@ -343,7 +344,13 @@ export default {
     },
 
     persist() {
-      localStorage.setItem(LS_KEY, JSON.stringify({ folders: this.folders, sets: this.sets }));
+      // Cards are never cached — only persist set summaries (metadata + counts),
+      // stripped of the card payload so study/edit always refetch fresh from the backend.
+      const setsForStorage = this.sets.map(s => {
+        const { cards, ...rest } = s;
+        return rest;
+      });
+      localStorage.setItem(LS_KEY, JSON.stringify({ folders: this.folders, sets: setsForStorage }));
       this.$store.commit('SET_FOLDERS', this.folders);
       this.$store.commit('SET_SETS',    this.sets);
     },
@@ -472,19 +479,15 @@ export default {
     },
 
     async startSetStudy(set) {
-      // Cards are lazy-loaded. If this set's cards aren't hydrated yet, fetch now.
+      // Cards are never cached — always refetch so study uses the latest content.
       let full = set;
-      if (this.isAuthenticated && (!set.cards || set.cards.length === 0)) {
+      if (this.isAuthenticated) {
         this.loading = true;
         try {
           const data = await flashcardApi.getSet(set.id);
           full = normalizeSet(data);
-          // Cache the hydrated cards for subsequent launches without a refetch.
-          const idx = this.sets.findIndex(s => s.id === set.id);
-          if (idx !== -1) this.sets[idx] = full;
-          this.persist();
         } catch (err) {
-          console.warn('Set fetch failed, using cached data:', err);
+          console.warn('Set fetch failed, using in-memory data:', err);
         } finally {
           this.loading = false;
         }
