@@ -1,6 +1,7 @@
 import Study from '@/views/Study.vue';
 import StudySession from '@/views/StudySession.vue';
 import SetEditor from '@/views/SetEditor.vue';
+import MediaStudy from '@/views/MediaStudy.vue';
 
 export default [
   {
@@ -25,5 +26,10 @@ export default [
     path: '/study/session',
     name: 'StudySession',
     component: StudySession,
+  },
+  {
+    path: '/study/media-session',
+    name: 'MediaStudy',
+    component: MediaStudy,
   },
 ];

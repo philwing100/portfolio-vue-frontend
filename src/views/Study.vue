@@ -10,14 +10,24 @@
         </template>
       </div>
 
-      <button
-        class="anki-all-btn"
-        :disabled="totalDue === 0 || loading"
-        @click="startAnkiAll"
-      >
-        ANKI All
-        <span v-if="totalDue > 0" class="anki-badge">{{ totalDue }}</span>
-      </button>
+      <div class="top-actions">
+        <button
+          class="anki-all-btn"
+          :disabled="totalDue === 0 || loading"
+          @click="startAnkiAll"
+        >
+          ANKI All
+          <span v-if="totalDue > 0" class="anki-badge">{{ totalDue }}</span>
+        </button>
+        <button
+          class="settings-btn"
+          @click="showSettingsModal = true"
+          title="Study settings"
+          aria-label="Study settings"
+        >
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
     </div>
 
     <!-- Loading indicator -->
@@ -79,7 +89,7 @@
       <template #item="{ element }">
         <SetCard
           :set="element"
-          :dueCount="getDueCount(element.cards)"
+          :dueCount="element.dueCount ?? getDueCount(element.cards)"
           @study="startSetStudy(element)"
           @edit="openSetModal"
           @delete="confirmDeleteSet"
@@ -117,6 +127,13 @@
       @confirm="executeDelete"
       @close="showDeleteConfirm = false"
     />
+    <StudySettingsModal
+      :isOpen="showSettingsModal"
+      :settings="studySettings"
+      :isMobile="isMobile"
+      @save="onSettingsSave"
+      @close="showSettingsModal = false"
+    />
   </div>
 </template>
 
@@ -126,10 +143,12 @@ import SetCard       from '@/components/FlashcardComponents/SetCard.vue';
 import FolderModal   from '@/components/FlashcardComponents/FolderModal.vue';
 import FolderTree    from '@/components/FlashcardComponents/FolderTree.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import StudySettingsModal from '@/components/FlashcardComponents/StudySettingsModal.vue';
 import draggable     from 'vuedraggable';
 import session       from '@/studySession.js';
 import { getDueCount, buildSession, reviewCard } from '@/anki';
-import { flashcardApi, normalizeSet, normalizeFolder, normalizeAnkiResponse } from '@/api/flashcards';
+import { flashcardApi, normalizeSet, normalizeCard, flattenFolderTree, normalizeAnkiResponse } from '@/api/flashcards';
+import { loadSettings, saveSettings } from '@/studySettings.js';
 
 const LS_KEY        = 'study-data';
 const ANKI_INFO_KEY = 'study-anki-info-dismissed';
@@ -161,7 +180,7 @@ const DEFAULT_SETS = [
 
 export default {
   name: 'StudyPage',
-  components: { FolderCard, SetCard, FolderModal, FolderTree, ConfirmDialog, draggable },
+  components: { FolderCard, SetCard, FolderModal, FolderTree, ConfirmDialog, StudySettingsModal, draggable },
 
   props: {
     folderId: { type: [String, Number], default: null },
@@ -180,6 +199,9 @@ export default {
       pendingDeleteType:    null,
       pendingDeleteId:      null,
       showAnkiInfo:         !localStorage.getItem(ANKI_INFO_KEY),
+      showSettingsModal:    false,
+      studySettings:        loadSettings(),
+      isMobile:             typeof window !== 'undefined' && window.innerWidth <= 768,
     };
   },
 
@@ -206,7 +228,7 @@ export default {
 
     totalDue() {
       const src = this.folderId ? this.visibleSets : this.sets;
-      return src.reduce((n, s) => n + getDueCount(s.cards), 0);
+      return src.reduce((n, s) => n + (s.dueCount ?? getDueCount(s.cards)), 0);
     },
 
     draggableFolderItems() {
@@ -225,9 +247,21 @@ export default {
     this.loadFromLocalStorage();
   },
 
+  mounted() {
+    window.addEventListener('resize', this.updateIsMobile);
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('resize', this.updateIsMobile);
+  },
+
   watch: {
-    $route() {
-      this.loadFromLocalStorage();
+    // Folder navigation — refetch sets for the new scope (direct children only).
+    folderId: {
+      handler() {
+        this.loadFromLocalStorage();
+        if (this.isAuthenticated) this.refreshCurrentFolderSets();
+      },
     },
   },
 
@@ -263,31 +297,42 @@ export default {
     },
 
     async loadFromBackend() {
+      // Two calls replace the old (1 + 1 + N) fan-out:
+      //   1) GET /folders/tree      — authoritative folder structure (no client-side tree building)
+      //   2) GET /folders/:id       — sets that are direct children of the current view (root if folderId is null)
+      // Set cards are fetched lazily at study time (startSetStudy / startAnkiAll).
       this.loading = true;
       try {
-        // flashcardApi methods already unwrap .data — results are raw arrays/objects
-        const [foldersData, setsOverview] = await Promise.all([
-          flashcardApi.getFolders(),
-          flashcardApi.getSets(),
-        ]);
-
-        this.folders = (Array.isArray(foldersData) ? foldersData : []).map(normalizeFolder);
-
-        const overview = Array.isArray(setsOverview) ? setsOverview : [];
-        const fullSets = await Promise.all(
-          overview.map(s =>
-            flashcardApi.getSet(s.set_id ?? s.id)
-              .then(setData => normalizeSet(setData))
-              .catch(() => null)
-          )
-        );
-
-        this.sets = fullSets.filter(Boolean);
-        this.$store.commit('SET_FOLDERS', this.folders);
-        this.$store.commit('SET_SETS',    this.sets);
+        await Promise.all([this.refreshFolderTree(), this.refreshCurrentFolderSets()]);
         this.persist();
       } finally {
         this.loading = false;
+      }
+    },
+
+    async refreshFolderTree() {
+      try {
+        const tree = await flashcardApi.getFolderTree();
+        this.folders = flattenFolderTree(tree);
+        this.$store.commit('SET_FOLDERS', this.folders);
+        this.persist();
+      } catch (err) {
+        console.warn('Folder tree fetch failed; keeping cached structure:', err);
+      }
+    },
+
+    async refreshCurrentFolderSets() {
+      try {
+        const view = await flashcardApi.getFolderView(this.folderId ?? 'root');
+        const directSets = Array.isArray(view?.sets) ? view.sets.map(normalizeSet) : [];
+        // Merge: replace any sets for this scope, keep sets from other scopes cached
+        const scope = this.folderId ?? null;
+        const otherScopeSets = this.sets.filter(s => (s.folderId ?? null) !== scope);
+        this.sets = [...otherScopeSets, ...directSets];
+        this.$store.commit('SET_SETS', this.sets);
+        this.persist();
+      } catch (err) {
+        console.warn('Folder view fetch failed; keeping cached sets:', err);
       }
     },
 
@@ -320,6 +365,24 @@ export default {
       localStorage.setItem(ANKI_INFO_KEY, '1');
     },
 
+    updateIsMobile() {
+      this.isMobile = window.innerWidth <= 768;
+    },
+
+    onSettingsSave(settings) {
+      this.studySettings = saveSettings(settings);
+      this.showSettingsModal = false;
+    },
+
+    launchMediaSession(sets, title) {
+      const cards = buildSession(sets, 'study');
+      if (!cards.length) return;
+      session.cards  = cards;
+      session.title  = title;
+      session.onRate = null;  // media mode never updates ANKI state
+      this.$router.push({ name: 'MediaStudy' });
+    },
+
     // ── Drag & drop ───────────────────────────────────────────────────────
 
     cloneItem(item) { return { ...item }; },
@@ -340,11 +403,13 @@ export default {
         this.persist();
 
         if (this.isAuthenticated) {
-          flashcardApi.moveFolder(id, targetFolderId).catch(err => {
-            console.warn('Reparent folder sync failed:', err);
-            folder.parentFolderId = previousParentId; // Revert local change
-            this.persist();
-          });
+          flashcardApi.moveFolder(id, targetFolderId)
+            .then(() => this.refreshFolderTree())
+            .catch(err => {
+              console.warn('Reparent folder sync failed:', err);
+              folder.parentFolderId = previousParentId; // Revert local change
+              this.persist();
+            });
         }
       } else if (type === 'set') {
         const set = this.sets.find(s => s.id === id);
@@ -376,13 +441,80 @@ export default {
 
     // ── Session launchers ─────────────────────────────────────────────────
 
-    startAnkiAll() {
-      const src = this.folderId ? this.visibleSets : this.sets;
-      this.launchSession(src, 'due', 'ANKI All');
+    async startAnkiAll() {
+      // Offline: fall back to whatever sets we have loaded locally.
+      if (!this.isAuthenticated) {
+        this.launchSession(this.folderId ? this.visibleSets : this.sets, 'due', 'ANKI All');
+        return;
+      }
+      // Online: ask the backend for the recursive due/new card list directly — no need
+      // to have sets' cards hydrated locally.
+      this.loading = true;
+      try {
+        const res = this.folderId
+          ? await flashcardApi.getFolderStudy(this.folderId)
+          : await flashcardApi.getAllCards();
+        const rawCards = Array.isArray(res) ? res : (res?.cards ?? []);
+        const cards = rawCards.map(c => normalizeCard(c, c.set_id));
+        this.launchCardsSession(cards, 'ANKI All');
+      } catch (err) {
+        console.warn('ANKI All fetch failed, falling back to local cache:', err);
+        this.launchSession(this.folderId ? this.visibleSets : this.sets, 'due', 'ANKI All');
+      } finally {
+        this.loading = false;
+      }
     },
 
-    startSetStudy(set) {
-      this.launchSession([set], 'study', set.title);
+    async startSetStudy(set) {
+      // Cards are lazy-loaded. If this set's cards aren't hydrated yet, fetch now.
+      let full = set;
+      if (this.isAuthenticated && (!set.cards || set.cards.length === 0)) {
+        this.loading = true;
+        try {
+          const data = await flashcardApi.getSet(set.id);
+          full = normalizeSet(data);
+          // Cache the hydrated cards for subsequent launches without a refetch.
+          const idx = this.sets.findIndex(s => s.id === set.id);
+          if (idx !== -1) this.sets[idx] = full;
+          this.persist();
+        } catch (err) {
+          console.warn('Set fetch failed, using cached data:', err);
+        } finally {
+          this.loading = false;
+        }
+      }
+      if (this.isMobile && this.studySettings.flashcardsType === 'media') {
+        this.launchMediaSession([full], full.title);
+      } else {
+        this.launchSession([full], 'study', full.title);
+      }
+    },
+
+    launchCardsSession(cards, title) {
+      if (!cards.length) return;
+      // Shuffle so the order isn't predictable across launches.
+      for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cards[i], cards[j]] = [cards[j], cards[i]];
+      }
+      session.cards = cards;
+      session.title = title;
+      const isAuth  = this.isAuthenticated;
+      session.onRate = async (cardId, setId, rating) => {
+        if (isAuth) {
+          try {
+            const res = await flashcardApi.reviewCard(cardId, rating);
+            this._applyAnkiUpdate(cardId, setId, normalizeAnkiResponse(res));
+          } catch (err) {
+            console.warn('Review sync failed, applying local SM-2:', err);
+            this._localReview(cardId, setId, rating);
+          }
+        } else {
+          this._localReview(cardId, setId, rating);
+        }
+        this.persist();
+      };
+      this.$router.push({ name: 'StudySession' });
     },
 
     launchSession(sets, mode, title) {
@@ -465,6 +597,8 @@ export default {
         } else {
           await flashcardApi.updateFolder(folder.id, folder);
         }
+        // Always reconcile the local tree with the backend after a folder write.
+        await this.refreshFolderTree();
       } catch (err) {
         console.warn('Backend folder save failed:', err);
       }
@@ -482,7 +616,10 @@ export default {
 
     async _executeDeleteFolder(folderId) {
       if (this.isAuthenticated) {
-        try { await flashcardApi.deleteFolder(folderId); } catch (err) { console.warn('Backend folder delete failed:', err); }
+        try {
+          await flashcardApi.deleteFolder(folderId);
+          await this.refreshFolderTree();
+        } catch (err) { console.warn('Backend folder delete failed:', err); }
       }
       const deleted = this.folders.find(f => f.id === folderId);
       // Reparent child folders
@@ -586,6 +723,12 @@ export default {
   font-size: 1rem;
   flex-shrink: 0;
 }
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
 .anki-all-btn {
   display: flex;
   align-items: center;
@@ -602,6 +745,24 @@ export default {
   white-space: nowrap;
   flex-shrink: 0;
   letter-spacing: 0.02em;
+}
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: transparent;
+  color: var(--accentColor);
+  border: 0.0625rem solid var(--secondaryColor);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.15s, opacity 0.15s;
+  flex-shrink: 0;
+}
+.settings-btn:hover {
+  background: var(--secondaryColor);
 }
 .anki-all-btn:hover    { opacity: 0.85; }
 .anki-all-btn:disabled { opacity: 0.3; cursor: default; }

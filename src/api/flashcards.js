@@ -59,9 +59,12 @@ export function normalizeSet(s) {
     id:       s.set_id,
     title:    s.title,
     // Prefer backend's folder_id; fall back to legacy description JSON for older records
-    folderId: s.folder_id ?? meta.folderId ?? null,
-    options:  meta.options ?? { newPerDay: 20, orderMode: 'random' },
-    cards:    (s.cards || []).map(c => normalizeCard(c, s.set_id)),
+    folderId:  s.folder_id ?? meta.folderId ?? null,
+    options:   meta.options ?? { newPerDay: 20, orderMode: 'random' },
+    cards:     (s.cards || []).map(c => normalizeCard(c, s.set_id)),
+    // Cached counts from folder-view endpoint (avoids fetching full cards just to render badges)
+    cardCount: s.card_count ?? null,
+    dueCount:  s.due_count  ?? null,
   };
 }
 
@@ -73,6 +76,32 @@ export function normalizeFolder(f) {
     color:          f.color,
     parentFolderId: f.parent_folder_id ?? null,
   };
+}
+
+/**
+ * Flatten a folder tree from GET /folders/tree into the flat frontend shape.
+ * Accepts either a flat array (already has parent_folder_id on each node) or a
+ * nested array where each node has a `children` field. In both cases the result
+ * is a flat array of normalized folders — the parent relationship is preserved
+ * in `parentFolderId`, so existing flat-filter code (visibleFolders, FolderTree)
+ * keeps working without change.
+ */
+export function flattenFolderTree(tree) {
+  const out = [];
+  const walk = (nodes, parentId) => {
+    (nodes || []).forEach(n => {
+      const id = n.folder_id ?? n.id;
+      out.push({
+        id,
+        title: n.title,
+        color: n.color,
+        parentFolderId: n.parent_folder_id ?? parentId ?? null,
+      });
+      if (Array.isArray(n.children) && n.children.length) walk(n.children, id);
+    });
+  };
+  walk(Array.isArray(tree) ? tree : (tree?.folders ?? []), null);
+  return out;
 }
 
 /** Normalize the SM-2 fields returned by POST /cards/:id/review */
@@ -102,6 +131,8 @@ function serializeSetPayload(set) {
 export const flashcardApi = {
   // Folders
   getFolders:   ()           => axios.get('/flashcards/folders').then(unwrap),
+  // Authoritative folder structure — backend builds the tree, frontend just flattens.
+  getFolderTree: ()          => axios.get('/flashcards/folders/tree').then(unwrap),
   createFolder: (folder)     => axios.post('/flashcards/folders', {
     title:            folder.title,
     color:            folder.color,

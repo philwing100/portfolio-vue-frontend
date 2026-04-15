@@ -5,7 +5,7 @@ A Vue 3 productivity + portfolio web app combining task management, habit tracki
 Backend code located at
 https://github.com/philwing100/portfolio-backend
 
-Mind your caveman skill.
+Read your caveman skill.
 ---
 
 ## Tech Stack
