@@ -197,12 +197,8 @@ export default {
     // ── Speech ────────────────────────────────────────────────────────────
     speak(text, side) {
       if (!this.ttsSupported || !text) {
-        // No TTS — simulate end so flip/auto-progress still works.
         this.isSpeaking = false;
         this.speakingSide = null;
-        if (side === this.settings.startWith) {
-          this._advanceTimer = setTimeout(() => this.autoFlipAndReadBack(), 400);
-        }
         return;
       }
       try {
@@ -216,12 +212,8 @@ export default {
         u.onstart = () => { this.isSpeaking = true; this.speakingSide = side; };
         u.onend   = () => {
           this.isSpeaking = false;
-          // Auto-flip after reading the "start" side.
-          if (side === this.settings.startWith && !this.hasFlipped) {
-            this.autoFlipAndReadBack();
-          } else {
-            this.speakingSide = null;
-          }
+          this.speakingSide = null;
+          // The back side is only read after explicit user input (tap/flip).
         };
         u.onerror = () => { this.isSpeaking = false; this.speakingSide = null; };
         window.speechSynthesis.speak(u);

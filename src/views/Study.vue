@@ -63,6 +63,9 @@
       :group="{ name: 'flashcard-items', pull: 'clone', put: false }"
       :sort="false"
       :clone="cloneItem"
+      :delay="200"
+      :delayOnTouchOnly="true"
+      :touchStartThreshold="5"
       item-key="id"
       v-if="visibleFolders.length"
     >
@@ -83,6 +86,9 @@
       :group="{ name: 'flashcard-items', pull: 'clone', put: false }"
       :sort="false"
       :clone="cloneItem"
+      :delay="200"
+      :delayOnTouchOnly="true"
+      :touchStartThreshold="5"
       item-key="id"
       v-if="visibleSets.length"
     >
